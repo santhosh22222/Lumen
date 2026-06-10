@@ -1,4 +1,4 @@
-const BASE = ""; // proxied via Vite to backend
+const BASE = import.meta.env.VITE_API_URL || "";
 
 function authHeaders() {
   const token = localStorage.getItem("lumen.auth.token");
