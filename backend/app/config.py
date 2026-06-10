@@ -90,7 +90,7 @@ def load_settings() -> Settings:
     origins = [o.strip() for o in origins_raw.split(",") if o.strip()]
     return Settings(
         groq_api_key=_env("GROQ_API_KEY"),
-        groq_model=_env("GROQ_MODEL", "openai/gpt-oss-120b") or "openai/gpt-oss-120b",
+        groq_model=_env("GROQ_MODEL", "llama-3.3-70b-versatile") or "llama-3.3-70b-versatile",
         opencode_api_key=_env("OPENCODE_API_KEY"),
         opencode_model=(_env("OPENCODE_MODEL", "big-pickle") or "big-pickle").strip().lower().replace(" ", "-"),
         openai_api_key=_env("OPENAI_API_KEY"),

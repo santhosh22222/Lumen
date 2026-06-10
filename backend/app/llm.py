@@ -187,9 +187,6 @@ class LLMClient:
             "top_p": 1,
             "stream": False,
         }
-        # gpt-oss models support a reasoning_effort knob.
-        if "gpt-oss" in (settings.groq_model or ""):
-            payload["reasoning_effort"] = "medium"
 
         async with httpx.AsyncClient(timeout=90) as client:
             r = await client.post(url, headers=headers, json=payload)
