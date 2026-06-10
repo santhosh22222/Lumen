@@ -168,45 +168,39 @@ export default function AuthModal({ open, user, onClose, onAuth, onLogout }) {
   const isResetFlow = [MODES.FORGOT, MODES.VERIFY, MODES.RESET].includes(currentMode);
 
   return (
-    <div className="fixed inset-0 z-50 flex justify-end" style={{ background: "rgba(0,0,0,0.4)", backdropFilter: "blur(6px)" }}>
+    <div
+      className="fixed inset-0 z-50 flex justify-end modal-overlay backdrop-blur-sm"
+      onClick={onClose}
+    >
       <motion.aside
         initial={{ x: "100%" }}
         animate={{ x: 0 }}
         exit={{ x: "100%" }}
         transition={{ type: "spring", damping: 28, stiffness: 300 }}
-        className="h-full w-full max-w-md overflow-auto flex flex-col"
-        style={{
-          background: "var(--color-paper-50, #fff)",
-          borderLeft: "1px solid var(--color-ink-200, #e5e7eb)",
-          boxShadow: "-20px 0 60px rgba(0,0,0,0.15)",
-        }}
+        onClick={(e) => e.stopPropagation()}
+        className="h-full w-full max-w-md overflow-auto flex flex-col border-l border-ink-200/80 shadow-lift bg-paper-50"
       >
         {/* Header */}
-        <div
-          className="sticky top-0 z-10 px-6 py-4 flex items-center justify-between"
-          style={{
-            background: "linear-gradient(135deg, #0f172a 0%, #1e293b 100%)",
-            borderBottom: "1px solid rgba(255,255,255,0.1)",
-          }}
-        >
-          <div className="flex items-center gap-3">
+        <div className="sticky top-0 z-10 bg-paper-50/95 backdrop-blur border-b border-ink-200 px-6 py-4 flex items-center justify-between shrink-0">
+          <div className="flex items-center gap-3 min-w-0">
             <div
-              className="w-10 h-10 rounded-xl flex items-center justify-center"
-              style={{ background: "linear-gradient(135deg, #6366f1, #8b5cf6)" }}
+              className="w-10 h-10 rounded-2xl flex items-center justify-center shrink-0"
+              style={{ background: "linear-gradient(135deg, rgb(var(--forest-500)), rgb(var(--coral-500)))" }}
             >
               <span className="text-white font-bold text-lg">L</span>
             </div>
-            <div>
-              <div className="text-white font-bold text-lg leading-tight">LuMen</div>
-              <div className="text-slate-400 text-xs">Smart Shopping Reader</div>
+            <div className="min-w-0">
+              <div className="font-display text-2xl text-ink-800">Profile</div>
+              <div className="label truncate">Smart Shopping Reader</div>
             </div>
           </div>
           <button
-              onClick={onClose}
-              className="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:text-white hover:bg-white/10 transition-all"
-            >
-              <X className="w-4 h-4" />
-            </button>
+            onClick={onClose}
+            className="w-8 h-8 rounded-lg flex items-center justify-center text-ink-500 hover:text-ink-800 hover:bg-ink-100 transition-all"
+            title="Close"
+          >
+            <X className="w-4 h-4" />
+          </button>
         </div>
 
         {/* Body */}
@@ -225,7 +219,7 @@ export default function AuthModal({ open, user, onClose, onAuth, onLogout }) {
                 <div
                   className="rounded-2xl p-6 text-center relative overflow-hidden"
                   style={{
-                    background: "linear-gradient(135deg, #6366f1 0%, #8b5cf6 50%, #a855f7 100%)",
+                    background: "linear-gradient(135deg, rgb(var(--forest-500)) 0%, rgb(var(--forest-600)) 50%, rgb(var(--coral-500)) 100%)",
                   }}
                 >
                   <div className="relative inline-block">
@@ -242,7 +236,7 @@ export default function AuthModal({ open, user, onClose, onAuth, onLogout }) {
                         </span>
                       </div>
                     )}
-                    <div className="absolute bottom-0 right-0 w-6 h-6 rounded-full bg-green-400 border-2 border-white" />
+                    <div className="absolute bottom-0 right-0 w-6 h-6 rounded-full bg-forest-500 border-2 border-paper-50" />
                   </div>
                   <div className="mt-3 text-white font-bold text-xl">{user.name}</div>
                   <div className="text-white/70 text-sm mt-0.5">{user.email}</div>
@@ -277,11 +271,8 @@ export default function AuthModal({ open, user, onClose, onAuth, onLogout }) {
                 </div>
 
                 {/* Edit Name */}
-                <div
-                  className="rounded-2xl p-5 space-y-3"
-                  style={{ background: "var(--color-ink-100, #f3f4f6)", border: "1px solid var(--color-ink-200, #e5e7eb)" }}
-                >
-                  <div className="flex items-center gap-2 text-sm font-semibold" style={{ color: "var(--color-ink-700, #374151)" }}>
+                <div className="rounded-2xl p-5 space-y-3 bg-paper-100 border border-ink-200/60">
+                  <div className="flex items-center gap-2 text-sm font-semibold" style={{ color: "rgb(var(--ink-700))" }}>
                     <Pencil className="w-4 h-4" /> Edit Display Name
                   </div>
                   <div className="flex gap-2">
@@ -289,21 +280,12 @@ export default function AuthModal({ open, user, onClose, onAuth, onLogout }) {
                       value={profileName}
                       onChange={(e) => setProfileName(e.target.value)}
                       placeholder="Your name"
-                      className="flex-1 rounded-xl px-4 py-3 text-sm outline-none transition-all"
-                      style={{
-                        background: "var(--color-paper-50, #fff)",
-                        border: "1px solid var(--color-ink-200, #e5e7eb)",
-                      }}
+                      className="flex-1 rounded-xl px-4 py-3 text-sm outline-none transition-all focus:ring-2 focus:ring-forest-500/40 placeholder:text-ink-400 bg-paper-50 border border-ink-200/60 text-ink-800"
                     />
                     <button
                       onClick={saveName}
                       disabled={savingName || !profileName.trim() || profileName === user.name}
-                      className="px-4 py-3 rounded-xl text-sm font-medium transition-all flex items-center gap-2"
-                      style={{
-                        background: "linear-gradient(135deg, #6366f1, #8b5cf6)",
-                        color: "white",
-                        opacity: savingName || !profileName.trim() || profileName === user.name ? 0.5 : 1,
-                      }}
+                      className="px-4 py-3 btn-primary"
                     >
                       {savingName ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
                       Save
@@ -318,11 +300,11 @@ export default function AuthModal({ open, user, onClose, onAuth, onLogout }) {
                 {/* Sign out */}
                 <button
                   onClick={handleLogout}
-                  className="w-full flex items-center justify-center gap-2 py-3 rounded-xl text-sm font-medium transition-all"
+                  className="w-full flex items-center justify-center gap-2 py-3 rounded-full text-sm font-medium transition-all"
                   style={{
-                    background: "rgba(239, 68, 68, 0.1)",
-                    color: "#ef4444",
-                    border: "1px solid rgba(239, 68, 68, 0.2)",
+                    background: "rgb(var(--coral-500) / 0.08)",
+                    color: "rgb(var(--coral-600))",
+                    border: "1px solid rgb(var(--coral-500) / 0.2)",
                   }}
                 >
                   <LogOut className="w-4 h-4" />
@@ -342,10 +324,10 @@ export default function AuthModal({ open, user, onClose, onAuth, onLogout }) {
               >
                 {/* Title */}
                 <div>
-                  <h2 className="font-bold text-2xl" style={{ color: "var(--color-ink-800, #1f2937)" }}>
-                    {mode === MODES.LOGIN ? "Welcome back 👋" : "Create account 🚀"}
+                  <h2 className="font-bold text-2xl text-ink-800">
+                    {mode === MODES.LOGIN ? "Welcome back" : "Create account"}
                   </h2>
-                  <p className="text-sm mt-1" style={{ color: "var(--color-ink-500, #6b7280)" }}>
+                  <p className="text-sm mt-1 text-ink-500">
                     {mode === MODES.LOGIN
                       ? "Sign in to access your AI shopping companion."
                       : "Join LuMen and discover smarter shopping."}
@@ -353,7 +335,7 @@ export default function AuthModal({ open, user, onClose, onAuth, onLogout }) {
                 </div>
 
                 {/* Tab switcher */}
-                <div className="flex rounded-full p-1" style={{ background: "var(--color-ink-100, #f3f4f6)" }}>
+                <div className="flex rounded-full p-1" style={{ background: "rgb(var(--ink-100) / 0.5)" }}>
                   {[MODES.LOGIN, MODES.REGISTER].map((m) => (
                     <button
                       key={m}
@@ -361,8 +343,8 @@ export default function AuthModal({ open, user, onClose, onAuth, onLogout }) {
                       className="flex-1 rounded-full px-4 py-2 text-sm font-medium transition-all"
                       style={
                         mode === m
-                          ? { background: "white", color: "#1f2937", boxShadow: "0 1px 4px rgba(0,0,0,0.1)" }
-                          : { color: "var(--color-ink-500, #6b7280)" }
+                          ? { background: "rgb(var(--paper-50))", color: "rgb(var(--forest-500))", boxShadow: "var(--shadow-soft)" }
+                          : { color: "rgb(var(--ink-400))" }
                       }
                     >
                       {m === MODES.LOGIN ? "Sign In" : "Sign Up"}
@@ -375,11 +357,11 @@ export default function AuthModal({ open, user, onClose, onAuth, onLogout }) {
 
                 {/* Divider */}
                 <div className="flex items-center gap-3">
-                  <div className="flex-1 h-px" style={{ background: "var(--color-ink-200, #e5e7eb)" }} />
-                  <span className="text-xs" style={{ color: "var(--color-ink-400, #9ca3af)" }}>
+                  <div className="flex-1 h-px bg-ink-200/60" />
+                  <span className="text-xs text-ink-400">
                     or continue with email
                   </span>
-                  <div className="flex-1 h-px" style={{ background: "var(--color-ink-200, #e5e7eb)" }} />
+                  <div className="flex-1 h-px bg-ink-200/60" />
                 </div>
 
                 {/* Auth Form */}
@@ -413,7 +395,7 @@ export default function AuthModal({ open, user, onClose, onAuth, onLogout }) {
                       <button
                         type="button"
                         onClick={() => setShowPassword(!showPassword)}
-                        className="text-slate-400 hover:text-slate-600 transition-colors"
+                        className="text-ink-400 hover:text-ink-600 transition-colors"
                       >
                         {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                       </button>
@@ -427,8 +409,8 @@ export default function AuthModal({ open, user, onClose, onAuth, onLogout }) {
                         setResetForm((prev) => ({ ...prev, email: authForm.email }));
                         switchMode(MODES.FORGOT);
                       }}
-                      className="text-sm font-medium transition-colors"
-                      style={{ color: "#6366f1" }}
+                      className="text-sm font-medium transition-colors hover:text-forest-600"
+                      style={{ color: "rgb(var(--forest-500))" }}
                     >
                       Forgot password?
                     </button>
@@ -440,13 +422,7 @@ export default function AuthModal({ open, user, onClose, onAuth, onLogout }) {
                   <button
                     type="submit"
                     disabled={authLoading}
-                    className="w-full py-3 rounded-xl text-white font-semibold text-sm transition-all flex items-center justify-center gap-2"
-                    style={{
-                      background: authLoading
-                        ? "#9ca3af"
-                        : "linear-gradient(135deg, #6366f1, #8b5cf6)",
-                      boxShadow: authLoading ? "none" : "0 4px 15px rgba(99,102,241,0.4)",
-                    }}
+                    className="w-full btn-primary py-3"
                   >
                     {authLoading && <Loader2 className="w-4 h-4 animate-spin" />}
                     {mode === MODES.LOGIN ? "Sign In" : "Create Account"}
@@ -465,10 +441,10 @@ export default function AuthModal({ open, user, onClose, onAuth, onLogout }) {
                 className="space-y-5"
               >
                 <div>
-                  <h2 className="font-bold text-2xl" style={{ color: "var(--color-ink-800, #1f2937)" }}>
-                    Reset Password 🔑
+                  <h2 className="font-bold text-2xl text-ink-800">
+                    Reset Password
                   </h2>
-                  <p className="text-sm mt-1" style={{ color: "var(--color-ink-500, #6b7280)" }}>
+                  <p className="text-sm mt-1 text-ink-500">
                     Enter your email and we'll send you a verification code.
                   </p>
                 </div>
@@ -486,8 +462,7 @@ export default function AuthModal({ open, user, onClose, onAuth, onLogout }) {
                   <button
                     type="submit"
                     disabled={authLoading}
-                    className="w-full py-3 rounded-xl text-white font-semibold text-sm flex items-center justify-center gap-2"
-                    style={{ background: "linear-gradient(135deg, #6366f1, #8b5cf6)" }}
+                    className="w-full btn-primary py-3"
                   >
                     {authLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Mail className="w-4 h-4" />}
                     Send Verification Code
@@ -495,8 +470,8 @@ export default function AuthModal({ open, user, onClose, onAuth, onLogout }) {
                   <button
                     type="button"
                     onClick={() => switchMode(MODES.LOGIN)}
-                    className="w-full py-3 rounded-xl text-sm font-medium transition-all"
-                    style={{ color: "var(--color-ink-500, #6b7280)", background: "var(--color-ink-100, #f3f4f6)" }}
+                    className="w-full py-3 rounded-full text-sm font-medium transition-all hover:bg-ink-100"
+                    style={{ color: "rgb(var(--ink-600))", background: "rgb(var(--ink-100) / 0.6)" }}
                   >
                     ← Back to Sign In
                   </button>
@@ -514,10 +489,10 @@ export default function AuthModal({ open, user, onClose, onAuth, onLogout }) {
                 className="space-y-5"
               >
                 <div>
-                  <h2 className="font-bold text-2xl" style={{ color: "var(--color-ink-800, #1f2937)" }}>
-                    Enter Code 🛡️
+                  <h2 className="font-bold text-2xl text-ink-800">
+                    Enter Code
                   </h2>
-                  <p className="text-sm mt-1" style={{ color: "var(--color-ink-500, #6b7280)" }}>
+                  <p className="text-sm mt-1 text-ink-500">
                     Check your email for the 4-digit code.
                   </p>
                 </div>
@@ -537,8 +512,7 @@ export default function AuthModal({ open, user, onClose, onAuth, onLogout }) {
                   <button
                     type="submit"
                     disabled={authLoading || resetForm.otp.length < 4}
-                    className="w-full py-3 rounded-xl text-white font-semibold text-sm flex items-center justify-center gap-2"
-                    style={{ background: "linear-gradient(135deg, #6366f1, #8b5cf6)", opacity: resetForm.otp.length < 4 ? 0.5 : 1 }}
+                    className="w-full btn-primary py-3"
                   >
                     {authLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <ShieldCheck className="w-4 h-4" />}
                     Verify Code
@@ -557,10 +531,10 @@ export default function AuthModal({ open, user, onClose, onAuth, onLogout }) {
                 className="space-y-5"
               >
                 <div>
-                  <h2 className="font-bold text-2xl" style={{ color: "var(--color-ink-800, #1f2937)" }}>
-                    New Password 🔒
+                  <h2 className="font-bold text-2xl text-ink-800">
+                    New Password
                   </h2>
-                  <p className="text-sm mt-1" style={{ color: "var(--color-ink-500, #6b7280)" }}>
+                  <p className="text-sm mt-1 text-ink-500">
                     Choose a strong password for your account.
                   </p>
                 </div>
@@ -576,7 +550,7 @@ export default function AuthModal({ open, user, onClose, onAuth, onLogout }) {
                       <button
                         type="button"
                         onClick={() => setShowPassword(!showPassword)}
-                        className="text-slate-400 hover:text-slate-600 transition-colors"
+                        className="text-ink-400 hover:text-ink-600 transition-colors"
                       >
                         {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                       </button>
@@ -587,8 +561,7 @@ export default function AuthModal({ open, user, onClose, onAuth, onLogout }) {
                   <button
                     type="submit"
                     disabled={authLoading}
-                    className="w-full py-3 rounded-xl text-white font-semibold text-sm flex items-center justify-center gap-2"
-                    style={{ background: "linear-gradient(135deg, #6366f1, #8b5cf6)" }}
+                    className="w-full btn-primary py-3"
                   >
                     {authLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <KeyRound className="w-4 h-4" />}
                     Update Password
@@ -607,18 +580,16 @@ export default function AuthModal({ open, user, onClose, onAuth, onLogout }) {
 
 function InputField({ label, type, value, onChange, placeholder, icon, suffix, inputMode, maxLength }) {
   return (
-    <label className="block space-y-1.5">
-      <span className="text-xs font-semibold uppercase tracking-wide" style={{ color: "var(--color-ink-500, #6b7280)" }}>
-        {label}
-      </span>
+    <label className="block space-y-1.5 text-left">
+      <span className="text-xs font-semibold text-ink-600">{label}</span>
       <div
-        className="flex items-center gap-3 rounded-xl px-4 py-3 transition-all"
+        className="flex items-center gap-3 rounded-xl px-4 py-3 transition-all focus-within:ring-2 focus-within:ring-forest-500/40"
         style={{
-          background: "var(--color-paper-50, #fff)",
-          border: "1.5px solid var(--color-ink-200, #e5e7eb)",
+          background: "rgb(var(--paper-50))",
+          border: "1.5px solid rgb(var(--ink-200) / 0.6)",
         }}
       >
-        <span style={{ color: "var(--color-ink-400, #9ca3af)" }}>{icon}</span>
+        <span style={{ color: "rgb(var(--ink-400))" }}>{icon}</span>
         <input
           type={type}
           value={value}
@@ -626,8 +597,8 @@ function InputField({ label, type, value, onChange, placeholder, icon, suffix, i
           placeholder={placeholder}
           inputMode={inputMode}
           maxLength={maxLength}
-          className="flex-1 text-sm bg-transparent outline-none"
-          style={{ color: "var(--color-ink-800, #1f2937)" }}
+          className="flex-1 text-sm bg-transparent outline-none placeholder:text-ink-400"
+          style={{ color: "rgb(var(--ink-800))" }}
         />
         {suffix}
       </div>
@@ -640,14 +611,14 @@ function InfoCard({ icon, label, value, accent }) {
     <div
       className="flex items-center gap-4 p-4 rounded-xl"
       style={{
-        background: accent ? "rgba(99,102,241,0.06)" : "var(--color-ink-100, #f3f4f6)",
-        border: accent ? "1px solid rgba(99,102,241,0.2)" : "1px solid var(--color-ink-200, #e5e7eb)",
+        background: accent ? "rgb(var(--forest-500) / 0.06)" : "rgb(var(--ink-100) / 0.6)",
+        border: accent ? "1px solid rgb(var(--forest-500) / 0.2)" : "1px solid rgb(var(--ink-200) / 0.4)",
       }}
     >
-      <span style={{ color: accent ? "#6366f1" : "var(--color-ink-400, #9ca3af)" }}>{icon}</span>
+      <span style={{ color: accent ? "rgb(var(--forest-500))" : "rgb(var(--ink-400))" }}>{icon}</span>
       <div className="flex-1 min-w-0">
-        <div className="text-xs font-medium" style={{ color: "var(--color-ink-400, #9ca3af)" }}>{label}</div>
-        <div className="text-sm font-semibold truncate mt-0.5" style={{ color: "var(--color-ink-700, #374151)" }}>{value}</div>
+        <div className="text-xs font-medium" style={{ color: "rgb(var(--ink-400))" }}>{label}</div>
+        <div className="text-sm font-semibold truncate mt-0.5" style={{ color: "rgb(var(--ink-700))" }}>{value}</div>
       </div>
     </div>
   );
@@ -659,9 +630,9 @@ function AlertBanner({ type, message }) {
     <div
       className="flex items-start gap-2 p-3 rounded-xl text-sm"
       style={{
-        background: isError ? "rgba(239,68,68,0.08)" : "rgba(34,197,94,0.08)",
-        border: `1px solid ${isError ? "rgba(239,68,68,0.2)" : "rgba(34,197,94,0.2)"}`,
-        color: isError ? "#dc2626" : "#16a34a",
+        background: isError ? "rgb(var(--coral-500) / 0.08)" : "rgb(var(--forest-500) / 0.08)",
+        border: isError ? "1px solid rgb(var(--coral-500) / 0.2)" : "1px solid rgb(var(--forest-500) / 0.2)",
+        color: isError ? "rgb(var(--coral-600))" : "rgb(var(--forest-600))",
       }}
     >
       {isError ? <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" /> : <CheckCircle2 className="w-4 h-4 shrink-0 mt-0.5" />}

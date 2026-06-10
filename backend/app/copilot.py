@@ -6,6 +6,7 @@ POST /api/chat
 """
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 from typing import Any, Dict, List, Optional
@@ -45,9 +46,27 @@ class SearchContext(BaseModel):
     summary: Optional[str] = None
 
 
+class CompareItemContext(BaseModel):
+    title: str
+    url: str
+    price: Optional[str] = None
+    source: Optional[str] = None
+
+
+class TrackedItemContext(BaseModel):
+    id: int
+    product_name: str
+    product_url: str
+    current_price: Optional[float] = None
+    target_price: float
+    source: Optional[str] = None
+
+
 class CopilotRequest(BaseModel):
     messages: List[ChatMessage] = Field(..., min_length=1, max_length=40)
     context: Optional[SearchContext] = None
+    compare_items: Optional[List[CompareItemContext]] = Field(default_factory=list)
+    tracked_items: Optional[List[TrackedItemContext]] = Field(default_factory=list)
 
 
 class CopilotResponse(BaseModel):
@@ -59,7 +78,11 @@ class CopilotResponse(BaseModel):
 
 # ── System prompt ──────────────────────────────────────────────────────────────
 
-def _build_system(context: Optional[SearchContext]) -> str:
+def _build_system(
+    context: Optional[SearchContext],
+    compare_items: Optional[List[CompareItemContext]] = None,
+    tracked_items: Optional[List[TrackedItemContext]] = None,
+) -> str:
     base = """You are LuMen Copilot — a smart, friendly AI shopping assistant embedded in the LuMen shopping app.
 You have access to live web search results and can help users:
 - Understand and compare products from their current search
@@ -72,6 +95,20 @@ Never invent prices or specs — only state what you know from the context or se
 If you're unsure, say so and offer to search for more info.
 Keep replies SHORT (3-5 sentences max unless user asks for detail).
 """
+
+    if compare_items:
+        items_str = "\n".join(
+            f"  - {it.title} ({it.price or 'Price N/A'}) from {it.source or 'Web'} [URL: {it.url}]"
+            for it in compare_items
+        )
+        base += f"\n\n## Comparison Drawer Context\nThe user currently has these items pinned in their comparison drawer:\n{items_str}"
+
+    if tracked_items:
+        items_str = "\n".join(
+            f"  - {it.product_name} (Current: {it.current_price or 'N/A'}, Target: {it.target_price}) from {it.source or 'Web'} [URL: {it.product_url}]"
+            for it in tracked_items
+        )
+        base += f"\n\n## Trackify Price Tracking Context\nThe user is currently tracking the prices of these items:\n{items_str}"
 
     if context and context.products:
         product_list = "\n".join(
@@ -139,7 +176,7 @@ async def copilot_chat(
 ) -> CopilotResponse:
     """Multi-turn AI shopping assistant. Works for guests too."""
 
-    system_prompt = _build_system(req.context)
+    system_prompt = _build_system(req.context, req.compare_items, req.tracked_items)
 
     # Build the messages payload for the LLM
     history = [
@@ -164,24 +201,81 @@ async def copilot_chat(
 
 
 async def _multi_turn_chat(system: str, messages: List[Dict[str, str]]) -> str:
-    """Call the active LLM provider with full conversation history."""
+    """Call the active LLM provider with full conversation history, falling back on failure."""
     if not llm.enabled:
         raise LLMError("No LLM provider configured.")
 
-    provider = settings.llm_provider
+    providers = llm._available_providers()
+    last_exc: Exception | None = None
 
+    for provider in providers:
+        try:
+            try:
+                return await _call_multi_turn_provider(provider, system, messages)
+            except httpx.HTTPStatusError as exc:
+                if exc.response.status_code == 429:
+                    # Rate limited — try one short Retry-After wait, then move on
+                    retry_after = exc.response.headers.get("retry-after")
+                    try:
+                        wait_s = min(float(retry_after), 15.0) if retry_after else 5.0
+                    except ValueError:
+                        wait_s = 5.0
+                    log.warning("%s rate-limited (429) in copilot; retrying in %.0fs", provider, wait_s)
+                    await asyncio.sleep(wait_s)
+                    return await _call_multi_turn_provider(provider, system, messages)
+                else:
+                    raise
+        except Exception as exc:
+            log.warning("%s failed (%s) in copilot; falling back to next provider", provider, exc)
+            last_exc = exc
+            continue
+
+    raise LLMError(f"All LLM providers failed in copilot. Last error: {last_exc}") from last_exc
+
+
+async def _call_multi_turn_provider(provider: str, system: str, messages: List[Dict[str, str]]) -> str:
     if provider == "groq":
         return await _groq_chat(system, messages)
+    if provider == "opencode":
+        return await _opencode_chat(system, messages)
     if provider == "openai":
         return await _openai_chat(system, messages)
     if provider == "gemini":
-        # Gemini doesn't natively support multi-turn in the same way,
-        # so we flatten into a single user message with history
         return await _gemini_chat_flat(system, messages)
     if provider == "anthropic":
         return await _anthropic_chat(system, messages)
-
     raise LLMError(f"Unsupported provider: {provider}")
+
+
+async def _opencode_chat(system: str, messages: List[Dict]) -> str:
+    url = "https://opencode.ai/zen/v1/responses"
+    headers = {
+        "Authorization": f"Bearer {settings.opencode_api_key}",
+        "Content-Type": "application/json",
+    }
+    payload: Dict[str, Any] = {
+        "model": settings.opencode_model or "big-pickle",
+        "messages": [{"role": "system", "content": system}] + messages,
+        "temperature": 0.5,
+        "max_tokens": 800,
+        "stream": False,
+    }
+    async with httpx.AsyncClient(timeout=60) as client:
+        r = await client.post(url, headers=headers, json=payload)
+        r.raise_for_status()
+        data = r.json()
+    
+    if "choices" in data:
+        return data["choices"][0]["message"]["content"]
+    elif "output" in data:
+        if isinstance(data["output"], list) and len(data["output"]) > 0:
+            if "message" in data["output"][0]:
+                return data["output"][0]["message"]["content"]
+            elif "content" in data["output"][0]:
+                return data["output"][0]["content"]
+        elif isinstance(data["output"], str):
+            return data["output"]
+    raise LLMError(f"Unexpected OpenCode response shape: {data}")
 
 
 async def _groq_chat(system: str, messages: List[Dict]) -> str:

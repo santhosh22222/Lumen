@@ -181,11 +181,11 @@ export async function resetPassword(email, otp_code, new_password) {
   return data;
 }
 
-export async function copilotChat({ messages, context }) {
+export async function copilotChat({ messages, context, compare_items = [], tracked_items = [] }) {
   const r = await fetch(`${BASE}/api/copilot`, {
     method: "POST",
     headers: { "Content-Type": "application/json", ...authHeaders() },
-    body: JSON.stringify({ messages, context }),
+    body: JSON.stringify({ messages, context, compare_items, tracked_items }),
   });
   const data = await r.json().catch(() => ({}));
   if (!r.ok) throw new Error(data?.detail || `Copilot failed (${r.status})`);

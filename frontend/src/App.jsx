@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { AlertTriangle } from "lucide-react";
+import { AlertTriangle, Lock } from "lucide-react";
 
 import TopBar from "./components/TopBar.jsx";
 import Hero from "./components/Hero.jsx";
@@ -14,7 +14,7 @@ import CompareDrawer from "./components/CompareDrawer.jsx";
 import AuthModal from "./components/auth/AuthModal.jsx";
 import TrackifyPanel from "./components/TrackifyPanel.jsx";
 import CopilotPanel from "./components/CopilotPanel.jsx";
-import { recommend, getHealth, getMe } from "./api.js";
+import { recommend, getHealth, getMe, listTrackify } from "./api.js";
 
 const HISTORY_KEY = "lumen.history.v1";
 const THEME_KEY = "lumen.theme.v1";
@@ -50,7 +50,7 @@ function saveHistory(items) {
 function ConfigWarning({ health }) {
   if (!health) return null;
   const missing = [];
-  if (!health.llm_provider) missing.push("an LLM key (GROQ / OPENAI / GEMINI / ANTHROPIC)");
+  if (!health.llm_provider) missing.push("an LLM key (GROQ / OPENCODE / OPENAI / GEMINI / ANTHROPIC)");
   if (!health.search_provider) missing.push("a search key (TAVILY or SERPAPI)");
   if (!missing.length) return null;
   return (
@@ -83,6 +83,26 @@ export default function App() {
   const [authChecked, setAuthChecked] = useState(false);
   // Track how many searches done — first one is free, second needs login
   const [chatCount, setChatCount] = useState(0);
+  const [trackedItems, setTrackedItems] = useState([]);
+  const [copilotInitialPrompt, setCopilotInitialPrompt] = useState(null);
+
+  const refreshTrackify = async () => {
+    if (!user) return;
+    try {
+      const res = await listTrackify();
+      setTrackedItems(res.items || []);
+    } catch (err) {
+      console.error("Failed to fetch Trackify items", err);
+    }
+  };
+
+  useEffect(() => {
+    if (user) {
+      refreshTrackify();
+    } else {
+      setTrackedItems([]);
+    }
+  }, [user]);
 
   useEffect(() => {
     const root = document.documentElement;
@@ -177,6 +197,28 @@ export default function App() {
     setTrackifyOpen(true);
   };
 
+  const startCopilotChat = (initialText) => {
+    setCopilotInitialPrompt(initialText);
+    setCopilotOpen(true);
+  };
+
+  const addToCompareFromTracked = (item) => {
+    if (!requireAuth()) return;
+    const mappedItem = {
+      title: item.product_name,
+      url: item.product_url,
+      price: item.last_checked_price ? `$${item.last_checked_price}` : (item.current_price ? `$${item.current_price}` : "Price N/A"),
+      image: item.image,
+      source: item.source || "Web",
+    };
+    setCompare((prev) => {
+      const exists = prev.find((r) => r.url === mappedItem.url);
+      if (exists) return prev;
+      return [...prev, mappedItem].slice(0, 6);
+    });
+    setDrawerOpen(true);
+  };
+
   return (
     <div className="app-shell min-h-full">
       <TopBar
@@ -193,7 +235,7 @@ export default function App() {
           setDrawerOpen(true);
         }}
         onOpenTrackify={() => openTrackify(null)}
-        trackifyCount={0}
+        trackifyCount={trackedItems.length}
         onOpenCopilot={() => setCopilotOpen(true)}
         copilotActive={copilotOpen}
         user={user}
@@ -231,32 +273,32 @@ export default function App() {
             <div
               className="mb-6 max-w-3xl rounded-2xl p-4 flex items-center justify-between gap-4"
               style={{
-                background: "linear-gradient(135deg, rgba(99,102,241,0.1), rgba(139,92,246,0.1))",
-                border: "1.5px solid rgba(99,102,241,0.25)",
+                background: "linear-gradient(135deg, rgb(var(--forest-500) / 0.08) 0%, rgb(var(--coral-500) / 0.08) 100%)",
+                border: "1.5px solid rgb(var(--forest-300) / 0.25)",
               }}
             >
               <div className="flex items-center gap-3">
                 <div
                   className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0"
-                  style={{ background: "linear-gradient(135deg, #6366f1, #8b5cf6)" }}
+                  style={{ background: "linear-gradient(135deg, rgb(var(--forest-500)), rgb(var(--coral-500)))" }}
                 >
-                  <span className="text-white text-base">🔒</span>
+                  <Lock className="w-4 h-4 text-white" />
                 </div>
                 <div>
-                  <div className="font-semibold text-sm" style={{ color: "var(--color-ink-800, #1f2937)" }}>
+                  <div className="font-semibold text-sm text-ink-800">
                     Login to continue searching
                   </div>
-                  <div className="text-xs mt-0.5" style={{ color: "var(--color-ink-500, #6b7280)" }}>
+                  <div className="text-xs mt-0.5 text-ink-500">
                     You've used your free search. Sign in to unlock unlimited access.
                   </div>
                 </div>
               </div>
               <button
                 onClick={() => setProfileOpen(true)}
-                className="shrink-0 px-4 py-2 rounded-xl text-sm font-semibold text-white transition-all"
+                className="shrink-0 px-5 py-2.5 rounded-full text-sm font-semibold text-white transition-all hover:scale-[1.02] active:scale-[0.98]"
                 style={{
-                  background: "linear-gradient(135deg, #6366f1, #8b5cf6)",
-                  boxShadow: "0 4px 12px rgba(99,102,241,0.35)",
+                  background: "linear-gradient(135deg, rgb(var(--forest-500)), rgb(var(--forest-600)))",
+                  boxShadow: "0 4px 12px rgb(var(--forest-500) / 0.25)",
                 }}
               >
                 Sign In / Sign Up
@@ -340,6 +382,8 @@ export default function App() {
         onClose={() => setDrawerOpen(false)}
         onRemove={(it) => toggleCompare(it)}
         onClear={clearCompare}
+        onStartCopilotChat={startCopilotChat}
+        onOpenTrackify={openTrackify}
       />
       <AuthModal
         open={profileOpen}
@@ -363,12 +407,22 @@ export default function App() {
       <TrackifyPanel
         open={trackifyOpen}
         user={user}
+        items={trackedItems}
+        refreshTrackify={refreshTrackify}
         initialProduct={trackifyInitialProduct}
         onClose={() => setTrackifyOpen(false)}
+        onAddToCompare={addToCompareFromTracked}
+        onStartCopilotChat={startCopilotChat}
       />
       <CopilotPanel
         open={copilotOpen}
         onClose={() => setCopilotOpen(false)}
+        compareList={compare}
+        trackedList={trackedItems}
+        onToggleCompare={toggleCompare}
+        onOpenTrackify={openTrackify}
+        initialPrompt={copilotInitialPrompt}
+        setInitialPrompt={setCopilotInitialPrompt}
         searchContext={
           data
             ? {
@@ -380,6 +434,7 @@ export default function App() {
                   price: r.price,
                   reason: r.reason,
                   source: r.source,
+                  image: r.image,
                 })),
               }
             : null

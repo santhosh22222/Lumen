@@ -1,9 +1,19 @@
 import { useEffect, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { X, Send, Bot, User, Loader2, ArrowUpRight, Search } from "lucide-react";
+import { X, Send, Bot, User, Loader2, ArrowUpRight, Search, Plus, Check, BellRing } from "lucide-react";
 import { copilotChat } from "../api.js";
 
-export default function CopilotPanel({ open, onClose, searchContext }) {
+export default function CopilotPanel({
+  open,
+  onClose,
+  searchContext,
+  compareList = [],
+  trackedList = [],
+  onToggleCompare,
+  onOpenTrackify,
+  initialPrompt,
+  setInitialPrompt,
+}) {
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
@@ -59,10 +69,8 @@ export default function CopilotPanel({ open, onClose, searchContext }) {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, loading]);
 
-  const send = async () => {
-    const text = input.trim();
+  const sendMessage = async (text) => {
     if (!text || loading) return;
-    setInput("");
     setError(null);
 
     const userMsg = { role: "user", content: text, id: Date.now() };
@@ -71,9 +79,25 @@ export default function CopilotPanel({ open, onClose, searchContext }) {
     setLoading(true);
 
     try {
-      // Only send role+content to the API
       const apiMessages = nextMessages.map(({ role, content }) => ({ role, content }));
-      const res = await copilotChat({ messages: apiMessages, context: searchContext || null });
+      const res = await copilotChat({
+        messages: apiMessages,
+        context: searchContext || null,
+        compare_items: compareList.map((it) => ({
+          title: it.title,
+          url: it.url,
+          price: it.price,
+          source: it.source,
+        })),
+        tracked_items: trackedList.map((it) => ({
+          id: it.id,
+          product_name: it.product_name,
+          product_url: it.product_url,
+          current_price: it.last_checked_price,
+          target_price: it.target_price,
+          source: it.source,
+        })),
+      });
 
       const assistantMsg = {
         role: "assistant",
@@ -90,6 +114,24 @@ export default function CopilotPanel({ open, onClose, searchContext }) {
       setLoading(false);
     }
   };
+
+  const send = () => {
+    const text = input.trim();
+    if (!text) return;
+    setInput("");
+    sendMessage(text);
+  };
+
+  // Handle initial preloaded prompt from other components
+  useEffect(() => {
+    if (open && initialPrompt) {
+      const promptText = initialPrompt;
+      setInitialPrompt(null);
+      setTimeout(() => {
+        sendMessage(promptText);
+      }, 300);
+    }
+  }, [open, initialPrompt]);
 
   const onKeyDown = (e) => {
     if (e.key === "Enter" && !e.shiftKey) {
@@ -108,7 +150,7 @@ export default function CopilotPanel({ open, onClose, searchContext }) {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 z-40 bg-ink-900/20 backdrop-blur-sm"
+            className="fixed inset-0 z-40 modal-overlay backdrop-blur-sm"
             onClick={onClose}
           />
 
@@ -119,24 +161,22 @@ export default function CopilotPanel({ open, onClose, searchContext }) {
             animate={{ x: 0 }}
             exit={{ x: "100%" }}
             transition={{ type: "spring", stiffness: 300, damping: 30 }}
-            className="fixed right-0 top-0 h-full z-50 w-full sm:w-[420px] flex flex-col shadow-2xl"
-            style={{ background: "var(--color-paper-50, #f9fafb)" }}
+            className="fixed right-0 top-0 h-full z-50 w-full sm:w-[420px] flex flex-col border-l border-ink-200/80 shadow-lift bg-paper-50"
           >
             {/* Header */}
-            <div
-              className="flex items-center gap-3 px-4 py-3 border-b border-ink-200 shrink-0"
-              style={{ background: "linear-gradient(135deg, rgba(99,102,241,0.08), rgba(139,92,246,0.08))" }}
-            >
-              <div
-                className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0"
-                style={{ background: "linear-gradient(135deg, #6366f1, #8b5cf6)" }}
-              >
-                <Bot className="w-4 h-4 text-white" />
-              </div>
-              <div className="flex-1 min-w-0">
-                <div className="font-semibold text-sm text-ink-800">LuMen Copilot</div>
-                <div className="text-[11px] text-ink-500 truncate">
-                  {searchContext?.query ? `Context: "${searchContext.query}"` : "AI Shopping Assistant"}
+            <div className="sticky top-0 z-10 bg-paper-50/95 backdrop-blur border-b border-ink-200 px-5 py-4 flex items-center justify-between shrink-0">
+              <div className="flex items-center gap-3 min-w-0">
+                <div
+                  className="w-10 h-10 rounded-2xl flex items-center justify-center shrink-0"
+                  style={{ background: "linear-gradient(135deg, rgb(var(--forest-500)), rgb(var(--coral-500)))" }}
+                >
+                  <Bot className="w-5 h-5 text-white" />
+                </div>
+                <div className="min-w-0">
+                  <div className="font-display text-2xl text-ink-800">Copilot</div>
+                  <div className="label truncate">
+                    {searchContext?.query ? `Context: "${searchContext.query}"` : "AI Shopping Assistant"}
+                  </div>
                 </div>
               </div>
               <button onClick={onClose} className="btn-ghost p-1.5" title="Close">
@@ -147,14 +187,22 @@ export default function CopilotPanel({ open, onClose, searchContext }) {
             {/* Messages */}
             <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4">
               {messages.map((msg) => (
-                <MessageBubble key={msg.id} msg={msg} />
+                <MessageBubble
+                  key={msg.id}
+                  msg={msg}
+                  compareList={compareList}
+                  trackedList={trackedList}
+                  onToggleCompare={onToggleCompare}
+                  onOpenTrackify={onOpenTrackify}
+                  searchContext={searchContext}
+                />
               ))}
 
               {loading && (
                 <div className="flex gap-2 items-start">
                   <div
                     className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0 mt-0.5"
-                    style={{ background: "linear-gradient(135deg, #6366f1, #8b5cf6)" }}
+                    style={{ background: "linear-gradient(135deg, rgb(var(--forest-500)), rgb(var(--coral-500)))" }}
                   >
                     <Bot className="w-3.5 h-3.5 text-white" />
                   </div>
@@ -179,7 +227,7 @@ export default function CopilotPanel({ open, onClose, searchContext }) {
                   <button
                     key={q}
                     onClick={() => { setInput(q); inputRef.current?.focus(); }}
-                    className="text-[11px] px-2.5 py-1 rounded-full border border-indigo-300 text-indigo-600 hover:bg-indigo-50 transition-colors"
+                    className="text-[11px] px-2.5 py-1 rounded-full border border-forest-200 text-forest-600 hover:bg-forest-50/50 transition-colors bg-paper-50/50"
                   >
                     {q}
                   </button>
@@ -196,14 +244,14 @@ export default function CopilotPanel({ open, onClose, searchContext }) {
                 onKeyDown={onKeyDown}
                 placeholder="Ask about battery life, gaming, price…"
                 rows={1}
-                className="flex-1 resize-none rounded-xl border border-ink-200 bg-paper-50 px-3 py-2 text-sm text-ink-800 placeholder:text-ink-400 focus:outline-none focus:ring-2 focus:ring-indigo-400 transition-shadow"
+                className="flex-1 resize-none rounded-xl border border-ink-200 bg-paper-50 px-3 py-2 text-sm text-ink-800 placeholder:text-ink-400 focus:outline-none focus:ring-2 focus:ring-forest-500/40 transition-shadow"
                 style={{ maxHeight: 100 }}
               />
               <button
                 onClick={send}
                 disabled={!input.trim() || loading}
-                className="shrink-0 w-9 h-9 rounded-xl flex items-center justify-center transition-all disabled:opacity-40 disabled:cursor-not-allowed"
-                style={{ background: "linear-gradient(135deg, #6366f1, #8b5cf6)" }}
+                className="shrink-0 w-9 h-9 rounded-xl flex items-center justify-center transition-all disabled:opacity-40 disabled:cursor-not-allowed hover:scale-[1.02] active:scale-[0.98]"
+                style={{ background: "linear-gradient(135deg, rgb(var(--forest-500)), rgb(var(--coral-500)))" }}
                 title="Send"
               >
                 <Send className="w-4 h-4 text-white" />
@@ -216,7 +264,14 @@ export default function CopilotPanel({ open, onClose, searchContext }) {
   );
 }
 
-function MessageBubble({ msg }) {
+function MessageBubble({
+  msg,
+  compareList = [],
+  trackedList = [],
+  onToggleCompare,
+  onOpenTrackify,
+  searchContext,
+}) {
   const isUser = msg.role === "user";
   return (
     <div className={`flex gap-2 items-start ${isUser ? "flex-row-reverse" : ""}`}>
@@ -224,7 +279,7 @@ function MessageBubble({ msg }) {
         className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 mt-0.5 ${
           isUser ? "bg-ink-200" : ""
         }`}
-        style={!isUser ? { background: "linear-gradient(135deg, #6366f1, #8b5cf6)" } : {}}
+        style={!isUser ? { background: "linear-gradient(135deg, rgb(var(--forest-500)), rgb(var(--coral-500)))" } : {}}
       >
         {isUser ? <User className="w-3.5 h-3.5 text-ink-600" /> : <Bot className="w-3.5 h-3.5 text-white" />}
       </div>
@@ -236,7 +291,7 @@ function MessageBubble({ msg }) {
               ? "text-white rounded-tr-sm"
               : "card rounded-tl-sm text-ink-800"
           }`}
-          style={isUser ? { background: "linear-gradient(135deg, #6366f1, #8b5cf6)" } : {}}
+          style={isUser ? { background: "linear-gradient(135deg, rgb(var(--user-bubble-start)), rgb(var(--user-bubble-end)))" } : {}}
           dangerouslySetInnerHTML={{ __html: renderMarkdown(msg.content) }}
         />
 
@@ -251,18 +306,79 @@ function MessageBubble({ msg }) {
         {/* New products found */}
         {msg.newProducts?.length > 0 && (
           <div className="w-full space-y-1.5 mt-1">
-            {msg.newProducts.slice(0, 3).map((p, i) => (
-              <a
-                key={i}
-                href={p.url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex items-center gap-2 card px-3 py-2 text-xs hover:bg-ink-100 transition-colors group"
-              >
-                <span className="flex-1 text-ink-700 truncate">{p.title}</span>
-                <ArrowUpRight className="w-3 h-3 text-ink-400 group-hover:text-indigo-500 shrink-0" />
-              </a>
-            ))}
+            {msg.newProducts.slice(0, 3).map((p, i) => {
+              const isCompared = compareList.some((c) => c.url === p.url);
+              const isTracked = trackedList.some((t) => t.product_url === p.url);
+
+              const handleCompareClick = (e) => {
+                e.preventDefault();
+                onToggleCompare({
+                  title: p.title,
+                  url: p.url,
+                  price: p.price || null,
+                  image: p.image || null,
+                  source: p.source || "Web",
+                });
+              };
+
+              const handleTrackClick = (e) => {
+                e.preventDefault();
+                const fullProduct = searchContext?.products?.find((item) => item.url === p.url) || p;
+                onOpenTrackify({
+                  title: fullProduct.title,
+                  url: fullProduct.url,
+                  source: fullProduct.source || "Web",
+                  image: fullProduct.image || null,
+                  current_price: fullProduct.price || null,
+                });
+              };
+
+              return (
+                <div
+                  key={i}
+                  className="flex items-center gap-2 card px-3 py-1.5 hover:bg-ink-100 transition-colors group relative"
+                >
+                  <a
+                    href={p.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex-1 text-xs text-ink-700 hover:text-forest-600 dark:hover:text-forest-400 truncate mr-1 font-medium"
+                  >
+                    {p.title}
+                  </a>
+                  
+                  <div className="flex items-center gap-1 shrink-0">
+                    <button
+                      onClick={handleTrackClick}
+                      title={isTracked ? "Price alerts active" : "Track price"}
+                      className={`p-1 rounded-md transition ${
+                        isTracked ? "text-forest-600 bg-forest-100" : "text-ink-400 hover:text-forest-600 hover:bg-ink-200"
+                      }`}
+                    >
+                      <BellRing className="w-3 h-3" />
+                    </button>
+                    <button
+                      onClick={handleCompareClick}
+                      title={isCompared ? "Remove from Compare" : "Add to Compare"}
+                      className={`p-1 rounded-md transition ${
+                        isCompared ? "text-coral-600 bg-coral-500/10" : "text-ink-400 hover:text-coral-500 hover:bg-ink-200"
+                      }`}
+                    >
+                      {isCompared ? <Check className="w-3 h-3" /> : <Plus className="w-3 h-3" />}
+                    </button>
+                    <a
+                      href={p.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="p-1 rounded-md text-ink-400 hover:text-ink-700 hover:bg-ink-200 transition"
+                      title="Open Link"
+                    >
+                      <ArrowUpRight className="w-3 h-3" />
+                    </a>
+                  </div>
+                </div>
+              );
+            })}
           </div>
         )}
       </div>

@@ -192,12 +192,11 @@ export function PickCard({ rec, rank, selected, onToggleCompare, onOpenTrackify 
   const displayTitle = useMemo(() => cleanTitle(title), [title]);
   const brand = useMemo(() => extractBrand(displayTitle), [displayTitle]);
 
-  const medals = ["🥇", "🥈", "🥉"];
   const labels = ["Best Pick", "Runner Up", "3rd Place"];
   const accentColors = [
-    "border-amber-400 bg-amber-50/60",
-    "border-slate-300 bg-slate-50/60",
-    "border-amber-700/40 bg-amber-50/30",
+    "border-forest-400 bg-forest-50/60",
+    "border-ink-300 bg-ink-100/50",
+    "border-coral-400/50 bg-coral-400/5",
   ];
 
   return (
@@ -223,7 +222,7 @@ export function PickCard({ rec, rank, selected, onToggleCompare, onOpenTrackify 
       {/* Content */}
       <div className="flex-1 min-w-0 flex flex-col gap-1.5">
         <div className="flex items-center gap-2">
-          <span className="text-base">{medals[rank] || `#${rank + 1}`}</span>
+          <span className="text-xs font-bold text-ink-500">#{rank + 1}</span>
           <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-ink-800 text-white">
             {labels[rank] || `#${rank + 1}`}
           </span>

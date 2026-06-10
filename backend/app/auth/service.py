@@ -22,7 +22,7 @@ OTP_MAX_ATTEMPTS = 5
 
 
 def _secret() -> str:
-    return os.getenv("AUTH_SECRET") or os.getenv("GROQ_API_KEY") or "lumen-local-dev-secret"
+    return os.getenv("AUTH_SECRET") or os.getenv("GROQ_API_KEY") or os.getenv("OPENCODE_API_KEY") or "lumen-local-dev-secret"
 
 
 def init_auth_db() -> None:

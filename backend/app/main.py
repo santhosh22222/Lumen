@@ -77,7 +77,7 @@ async def recommend_endpoint(
     if not llm.enabled:
         raise HTTPException(
             status_code=503,
-            detail="No LLM provider configured. Set OPENAI_API_KEY, GEMINI_API_KEY, or ANTHROPIC_API_KEY.",
+            detail="No LLM provider configured. Set GROQ_API_KEY, OPENCODE_API_KEY, OPENAI_API_KEY, GEMINI_API_KEY, or ANTHROPIC_API_KEY.",
         )
     if not search_client.enabled:
         raise HTTPException(
@@ -101,7 +101,7 @@ async def compare_endpoint(
     if not llm.enabled:
         raise HTTPException(
             status_code=503,
-            detail="No LLM provider configured. Set GROQ_API_KEY, OPENAI_API_KEY, GEMINI_API_KEY, or ANTHROPIC_API_KEY.",
+            detail="No LLM provider configured. Set GROQ_API_KEY, OPENCODE_API_KEY, OPENAI_API_KEY, GEMINI_API_KEY, or ANTHROPIC_API_KEY.",
         )
     try:
         return await run_compare(req)

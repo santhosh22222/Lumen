@@ -10,9 +10,31 @@ export default function GoogleSignInButton({ onSuccess, loading }) {
 
   useEffect(() => {
     if (!GOOGLE_CLIENT_ID) {
-      setSdkError(true);
       return;
     }
+
+    const initGoogle = () => {
+      let attempts = 0;
+      const checkAndInit = () => {
+        if (window.google?.accounts?.id) {
+          window.google.accounts.id.initialize({
+            client_id: GOOGLE_CLIENT_ID,
+            callback: (res) => {
+              if (res?.credential) {
+                onSuccess(res.credential);
+              }
+            },
+          });
+          setSdkReady(true);
+        } else if (attempts < 50) {
+          attempts++;
+          setTimeout(checkAndInit, 100);
+        } else {
+          setSdkError(true);
+        }
+      };
+      checkAndInit();
+    };
 
     // Load Google Identity Services script
     const existing = document.getElementById("google-gsi-script");
@@ -30,22 +52,6 @@ export default function GoogleSignInButton({ onSuccess, loading }) {
     script.onerror = () => setSdkError(true);
     document.head.appendChild(script);
 
-    function initGoogle() {
-      if (!window.google?.accounts?.id) {
-        setSdkError(true);
-        return;
-      }
-      window.google.accounts.id.initialize({
-        client_id: GOOGLE_CLIENT_ID,
-        callback: (res) => {
-          if (res?.credential) {
-            onSuccess(res.credential);
-          }
-        },
-      });
-      setSdkReady(true);
-    }
-
     return () => {};
   }, []);
 
@@ -56,37 +62,64 @@ export default function GoogleSignInButton({ onSuccess, loading }) {
         size: "large",
         width: btnRef.current.offsetWidth || 360,
         text: "signin_with",
-        shape: "rectangular",
+        shape: "pill",
         logo_alignment: "left",
       });
     }
   }, [sdkReady]);
 
-  if (sdkError || !GOOGLE_CLIENT_ID) {
-    // Fallback: show disabled button with notice
+  const handleDevBypass = () => {
+    try {
+      const header = { alg: "none", typ: "JWT" };
+      const payload = {
+        email: "google-dev-user@gmail.com",
+        name: "Google Dev User",
+        picture: "https://lh3.googleusercontent.com/a/default-user=s96-c",
+        sub: "mock_google_sub_123456789",
+      };
+      const base64UrlEncode = (obj) => {
+        const str = JSON.stringify(obj);
+        const base64 = btoa(unescape(encodeURIComponent(str)));
+        return base64.replace(/=/g, "").replace(/\+/g, "-").replace(/\//g, "_");
+      };
+      const token = `${base64UrlEncode(header)}.${base64UrlEncode(payload)}.mock-signature`;
+      onSuccess(token);
+    } catch (err) {
+      console.error("Failed to generate mock token:", err);
+    }
+  };
+
+  if (sdkError) {
     return (
       <div className="space-y-1">
         <button
           type="button"
           disabled
-          className="w-full flex items-center justify-center gap-3 py-3 rounded-xl text-sm font-medium transition-all"
-          style={{
-            border: "1.5px solid #e5e7eb",
-            background: "#f9fafb",
-            color: "#9ca3af",
-            cursor: "not-allowed",
-          }}
-          title="Add VITE_GOOGLE_CLIENT_ID to frontend/.env to enable"
+          className="w-full flex items-center justify-center gap-3 py-3 rounded-full text-sm font-medium border border-ink-200 bg-paper-100 text-ink-400 cursor-not-allowed"
+          title="Google SDK failed to load"
         >
           <GoogleIcon className="w-4 h-4 opacity-40" />
-          Continue with Google
+          Continue with Google (SDK Error)
         </button>
-        {!GOOGLE_CLIENT_ID && (
-          <p className="text-center text-xs" style={{ color: "#9ca3af" }}>
-            Set <code className="font-mono text-xs bg-gray-100 px-1 rounded">VITE_GOOGLE_CLIENT_ID</code> in{" "}
-            <code className="font-mono text-xs bg-gray-100 px-1 rounded">frontend/.env</code> to enable
-          </p>
-        )}
+      </div>
+    );
+  }
+
+  if (!GOOGLE_CLIENT_ID) {
+    return (
+      <div className="space-y-2">
+        <button
+          type="button"
+          onClick={handleDevBypass}
+          className="w-full flex items-center justify-center gap-3 py-3 rounded-full text-sm font-medium border border-ink-200 bg-paper-50 hover:bg-ink-100 text-ink-800 transition-all active:scale-[0.98]"
+          title="Click to sign in with a simulated Google Developer Account"
+        >
+          <GoogleIcon className="w-4 h-4" />
+          Continue with Google <span className="text-xs text-coral-500 font-semibold">(Dev Bypass)</span>
+        </button>
+        <p className="text-center text-[10px]" style={{ color: "rgb(var(--ink-400))" }}>
+          Simulating Google Sign-In locally. Set <code className="font-mono bg-ink-100 text-ink-700 px-1 rounded text-[10px]">VITE_GOOGLE_CLIENT_ID</code> to use real Google accounts.
+        </p>
       </div>
     );
   }
@@ -94,8 +127,8 @@ export default function GoogleSignInButton({ onSuccess, loading }) {
   return (
     <div className="relative">
       {loading && (
-        <div className="absolute inset-0 flex items-center justify-center rounded-xl z-10" style={{ background: "rgba(255,255,255,0.8)" }}>
-          <Loader2 className="w-5 h-5 animate-spin text-indigo-500" />
+        <div className="absolute inset-0 flex items-center justify-center rounded-xl z-10" style={{ background: "rgb(var(--paper-50) / 0.8)" }}>
+          <Loader2 className="w-5 h-5 animate-spin text-coral-500" />
         </div>
       )}
       {/* Google renders its own button here */}
@@ -104,10 +137,9 @@ export default function GoogleSignInButton({ onSuccess, loading }) {
         <button
           type="button"
           disabled
-          className="w-full flex items-center justify-center gap-3 py-3 rounded-xl text-sm font-medium"
-          style={{ border: "1.5px solid #e5e7eb", background: "#f9fafb", color: "#6b7280" }}
+          className="w-full flex items-center justify-center gap-3 py-3 rounded-full text-sm font-medium border border-ink-200 bg-paper-100 text-ink-500"
         >
-          <Loader2 className="w-4 h-4 animate-spin" />
+          <Loader2 className="w-4 h-4 animate-spin text-forest-500" />
           Loading Google...
         </button>
       )}

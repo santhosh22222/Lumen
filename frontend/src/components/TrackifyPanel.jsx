@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { BellRing, CheckCircle2, ImageOff, Link, Loader2, Mail, RefreshCw, Target, Trash2, X } from "lucide-react";
+import { BellRing, CheckCircle2, ImageOff, Link, Loader2, Mail, RefreshCw, Target, Trash2, X, Plus, MessageSquare } from "lucide-react";
 
 import { addTrackify, listTrackify, previewTrackify, removeTrackify, updateTrackifyTarget } from "../api.js";
 
@@ -15,8 +15,16 @@ function statusFor(item) {
   return { label: "Tracking", className: "text-coral-700 bg-coral-400/10 border-coral-400/40" };
 }
 
-export default function TrackifyPanel({ open, user, initialProduct, onClose }) {
-  const [items, setItems] = useState([]);
+export default function TrackifyPanel({
+  open,
+  user,
+  items = [],
+  refreshTrackify,
+  initialProduct,
+  onClose,
+  onAddToCompare,
+  onStartCopilotChat,
+}) {
   const [error, setError] = useState("");
   const [productUrl, setProductUrl] = useState("");
   const [preview, setPreview] = useState(null);
@@ -31,12 +39,6 @@ export default function TrackifyPanel({ open, user, initialProduct, onClose }) {
     const dropped = items.filter((item) => item.last_checked_price !== null && item.last_checked_price <= item.target_price).length;
     return { total: items.length, tracking: items.length - dropped, dropped };
   }, [items]);
-
-  async function refreshTrackify() {
-    if (!user) return;
-    const data = await listTrackify();
-    setItems(data.items || []);
-  }
 
   useEffect(() => {
     if (!open || !user) return;
@@ -173,8 +175,14 @@ export default function TrackifyPanel({ open, user, initialProduct, onClose }) {
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-50 modal-overlay backdrop-blur-[4px] flex justify-end">
-      <aside className="h-full w-full max-w-4xl bg-paper-50 shadow-lift border-l border-ink-200 overflow-auto">
+    <div
+      className="fixed inset-0 z-50 modal-overlay backdrop-blur-[4px] flex justify-end"
+      onClick={onClose}
+    >
+      <aside
+        onClick={(e) => e.stopPropagation()}
+        className="h-full w-full max-w-4xl bg-paper-50 shadow-lift border-l border-ink-200 overflow-auto"
+      >
         <div className="sticky top-0 z-10 bg-paper-50/95 backdrop-blur border-b border-ink-200 px-5 py-4 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <span className="w-10 h-10 rounded-2xl bg-forest-500 text-paper-50 flex items-center justify-center">
@@ -317,6 +325,30 @@ export default function TrackifyPanel({ open, user, initialProduct, onClose }) {
                             <button onClick={() => saveTarget(item)} className="btn-ghost">
                               <Target className="w-4 h-4 text-forest-600" />
                               Update target
+                            </button>
+                          </div>
+                          <div className="mt-2.5 flex flex-wrap gap-2 items-center">
+                            <button
+                              onClick={() => {
+                                onAddToCompare(item);
+                                onClose();
+                              }}
+                              className="btn-ghost py-1 px-2.5 text-xs text-coral-600 dark:text-coral-400 border border-coral-200 dark:border-coral-800/40 rounded-lg hover:bg-coral-50/50 dark:hover:bg-coral-950/20 flex items-center gap-1"
+                              title="Compare this product side by side"
+                            >
+                              <Plus className="w-3 h-3" />
+                              Compare
+                            </button>
+                            <button
+                              onClick={() => {
+                                onStartCopilotChat(`What is your analysis of this tracked product: "${item.product_name}"? Do you think the current price of $${item.last_checked_price ?? item.current_price ?? 'N/A'} is a good deal compared to my target price of $${item.target_price}?`);
+                                onClose();
+                              }}
+                              className="btn-ghost py-1 px-2.5 text-xs text-forest-600 dark:text-forest-400 border border-forest-200 dark:border-forest-800/40 rounded-lg hover:bg-forest-50/50 dark:hover:bg-forest-950/20 flex items-center gap-1"
+                              title="Discuss this product with Copilot"
+                            >
+                              <MessageSquare className="w-3 h-3" />
+                              Ask Copilot
                             </button>
                           </div>
                         </div>

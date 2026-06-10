@@ -22,9 +22,15 @@ class DBError(RuntimeError):
 def _client() -> MongoClient:
     uri = (os.getenv("MONGODB_URI") or "").strip()
     if not uri:
-        raise DBError(
-            "MONGODB_URI is not set. Add your MongoDB Atlas connection string to backend/.env"
-        )
+        try:
+            import mongomock
+            import logging
+            logging.getLogger("lumen").warning("MONGODB_URI not found. Falling back to in-memory mongomock database.")
+            return mongomock.MongoClient()
+        except ImportError:
+            raise DBError(
+                "MONGODB_URI is not set. Add your MongoDB Atlas connection string to backend/.env"
+            )
     return MongoClient(uri, serverSelectionTimeoutMS=8000)
 
 

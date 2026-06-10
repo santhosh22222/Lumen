@@ -63,6 +63,8 @@ class LLMClient:
         order = []
         if settings.groq_api_key:
             order.append("groq")
+        if settings.opencode_api_key:
+            order.append("opencode")
         if settings.gemini_api_key:
             order.append("gemini")
         if settings.openai_api_key:
@@ -82,6 +84,8 @@ class LLMClient:
             return await self._openai(system, user, temperature, max_tokens)
         if provider == "groq":
             return await self._groq(system, user, temperature, max_tokens)
+        if provider == "opencode":
+            return await self._opencode(system, user, temperature, max_tokens)
         if provider == "gemini":
             return await self._gemini(system, user, temperature, max_tokens)
         if provider == "anthropic":
@@ -104,32 +108,23 @@ class LLMClient:
 
         for provider in providers:
             try:
-                return await self._call_provider(provider, system, user, temperature, max_tokens)
-            except httpx.HTTPStatusError as exc:
-                status = exc.response.status_code
-                if status == 429:
-                    # Rate limited — try one short Retry-After wait, then move on
-                    retry_after = exc.response.headers.get("retry-after")
-                    try:
-                        wait_s = min(float(retry_after), 15.0) if retry_after else 5.0
-                    except ValueError:
-                        wait_s = 5.0
-                    log.warning("%s rate-limited (429); retrying in %.0fs", provider, wait_s)
-                    await asyncio.sleep(wait_s)
-                    try:
+                try:
+                    return await self._call_provider(provider, system, user, temperature, max_tokens)
+                except httpx.HTTPStatusError as exc:
+                    if exc.response.status_code == 429:
+                        # Rate limited — try one short Retry-After wait, then move on
+                        retry_after = exc.response.headers.get("retry-after")
+                        try:
+                            wait_s = min(float(retry_after), 15.0) if retry_after else 5.0
+                        except ValueError:
+                            wait_s = 5.0
+                        log.warning("%s rate-limited (429); retrying in %.0fs", provider, wait_s)
+                        await asyncio.sleep(wait_s)
                         return await self._call_provider(provider, system, user, temperature, max_tokens)
-                    except Exception as exc2:  # still failing → next provider
-                        log.warning("%s still failing after retry (%s); falling back", provider, exc2)
-                        last_exc = exc2
-                        continue
-                elif status in (500, 502, 503):
-                    log.warning("%s server error (%d); falling back to next provider", provider, status)
-                    last_exc = exc
-                    continue
-                else:
-                    raise
-            except (httpx.TimeoutException, httpx.ConnectError) as exc:
-                log.warning("%s unreachable (%s); falling back", provider, exc)
+                    else:
+                        raise
+            except Exception as exc:
+                log.warning("%s failed (%s); falling back to next provider", provider, exc)
                 last_exc = exc
                 continue
 
@@ -204,6 +199,52 @@ class LLMClient:
             content = data["choices"][0]["message"]["content"]
         except (KeyError, IndexError) as exc:
             raise LLMError(f"Unexpected Groq response shape: {data}") from exc
+        return _extract_json(content)
+
+    # ─── OpenCode Zen (OpenAI-compatible) ──────────────────────
+    async def _opencode(
+        self, system: str, user: str, temperature: float, max_tokens: int
+    ) -> Dict[str, Any]:
+        url = "https://opencode.ai/zen/v1/responses"
+        headers = {
+            "Authorization": f"Bearer {settings.opencode_api_key}",
+            "Content-Type": "application/json",
+        }
+        payload = {
+            "model": settings.opencode_model,
+            "messages": [
+                {
+                    "role": "system",
+                    "content": (
+                        system
+                        + "\n\nRespond ONLY with a single valid JSON object. "
+                        "No prose, no markdown, no code fences."
+                    ),
+                },
+                {"role": "user", "content": user},
+            ],
+            "temperature": temperature,
+            "max_tokens": max_tokens,
+        }
+        async with httpx.AsyncClient(timeout=90) as client:
+            r = await client.post(url, headers=headers, json=payload)
+            r.raise_for_status()
+            data = r.json()
+        
+        content = None
+        if "choices" in data:
+            content = data["choices"][0]["message"]["content"]
+        elif "output" in data:
+            if isinstance(data["output"], list) and len(data["output"]) > 0:
+                if "message" in data["output"][0]:
+                    content = data["output"][0]["message"]["content"]
+                elif "content" in data["output"][0]:
+                    content = data["output"][0]["content"]
+            elif isinstance(data["output"], str):
+                content = data["output"]
+        
+        if content is None:
+            raise LLMError(f"Unexpected OpenCode response shape: {data}")
         return _extract_json(content)
 
     # ─── Gemini ────────────────────────────────────────────────

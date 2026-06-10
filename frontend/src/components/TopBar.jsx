@@ -1,5 +1,5 @@
 import { AnimatePresence, motion } from "framer-motion";
-import { BellRing, Cpu, Globe, History, Layers, MessageCircle, Moon, Sun, UserCircle } from "lucide-react";
+import { BellRing, History, Layers, MessageCircle, Moon, Sun, UserCircle } from "lucide-react";
 
 export default function TopBar({
   providers,
@@ -41,32 +41,7 @@ export default function TopBar({
         </div>
 
         <div className="ml-auto flex items-center gap-1 sm:gap-2">
-          {providers?.llm && (
-            <motion.span
-              initial={{ opacity: 0, y: -4 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="hidden md:inline-flex items-center gap-1.5 chip"
-              title="LLM provider"
-            >
-              <span className="live-dot" aria-hidden="true" />
-              <Cpu className="w-3.5 h-3.5" />
-              <span className="font-mono text-[11px]">
-                {providers.llm}
-                {providers.llm_model ? `/${providers.llm_model.split("/").pop()}` : ""}
-              </span>
-            </motion.span>
-          )}
-          {providers?.search && (
-            <motion.span
-              initial={{ opacity: 0, y: -4 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="hidden md:inline-flex items-center gap-1.5 chip"
-              title="Search provider"
-            >
-              <Globe className="w-3.5 h-3.5" />
-              <span className="font-mono text-[11px]">{providers.search}</span>
-            </motion.span>
-          )}
+
 
           <ThemeToggle theme={theme} onToggle={onToggleTheme} />
 
@@ -74,7 +49,7 @@ export default function TopBar({
 
           <button
             onClick={onOpenCopilot}
-            className={`btn-ghost relative ${copilotActive ? "text-indigo-600" : ""}`}
+            className={`btn-ghost relative ${copilotActive ? "text-forest-600 dark:text-forest-400 bg-forest-50/50 dark:bg-forest-950/20 font-medium" : ""}`}
             title="AI Copilot"
           >
             <MessageCircle className="w-4 h-4" />
