@@ -1,34 +1,37 @@
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { motion } from "framer-motion";
-import { ArrowUpRight, BellRing, Check, Plus, Star } from "lucide-react";
+import { ArrowUpRight, BellRing, Check, ImageOff, Plus, Star } from "lucide-react";
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
 const BRANDS = [
-  "ASUS","Acer","HP","Dell","Lenovo","Apple","Samsung","Sony","LG","Realme",
-  "OnePlus","Xiaomi","Redmi","Poco","Motorola","Nokia","iQOO","Vivo","Oppo",
-  "Nothing","Google","Microsoft","Razer","MSI","Gigabyte","Bosch","Philips",
-  "Panasonic","Whirlpool","Godrej","Bajaj","Havells","Dyson","Bose","JBL",
-  "Sennheiser","Jabra","Anker","Logitech","Corsair","HyperX","SteelSeries",
-  "Canon","Nikon","Fujifilm","GoPro","DJI","Epson","Brother","Zebronics",
-  "boat","boAt","Skullcandy","Marshall","Fitbit","Garmin","Fossil","Noise",
-  "Fire-Boltt","Amazfit","Reebok","Adidas","Nike","Puma","Casio","Titan",
-  "Victus","Vivobook","ZenBook","IdeaPad","ThinkPad","Inspiron","XPS","Spectre",
+  "ASUS", "Acer", "HP", "Dell", "Lenovo", "Apple", "Samsung", "Sony", "LG", "Realme",
+  "OnePlus", "Xiaomi", "Redmi", "Poco", "Motorola", "Nokia", "iQOO", "Vivo", "Oppo",
+  "Nothing", "Google", "Microsoft", "Razer", "MSI", "Gigabyte", "Bosch", "Philips",
+  "Panasonic", "Whirlpool", "Godrej", "Bajaj", "Havells", "Dyson", "Bose", "JBL",
+  "Sennheiser", "Jabra", "Anker", "Logitech", "Corsair", "HyperX", "SteelSeries",
+  "Canon", "Nikon", "Fujifilm", "GoPro", "DJI", "Epson", "Brother", "Zebronics",
+  "boat", "boAt", "Skullcandy", "Marshall", "Fitbit", "Garmin", "Fossil", "Noise",
+  "Fire-Boltt", "Amazfit", "Reebok", "Adidas", "Nike", "Puma", "Casio", "Titan",
+  "Victus", "Vivobook", "ZenBook", "IdeaPad", "ThinkPad", "Inspiron", "XPS", "Spectre",
 ];
 
 function extractBrand(title) {
   if (!title) return null;
+
   for (const b of BRANDS) {
     if (new RegExp(`\\b${b}\\b`, "i").test(title)) {
       return b.toUpperCase() === b ? b : b.charAt(0).toUpperCase() + b.slice(1);
     }
   }
+
   return null;
 }
 
 function cleanTitle(title) {
   if (!title) return "";
-  return title
+
+  return String(title)
     .replace(/\s*[|\-–—]\s*(amazon|flipkart|myntra|snapdeal|croma|reliance digital|tata cliq|meesho|shopclues|paytm mall|jiomart|ebay|walmart|bestbuy|newegg|b&h|bhphotovideo|costco|target|notebookcheck|gsmarena|91mobiles|smartprix|gadgets360|techradar|tomsguide|pcmag|rtings|which|expert reviews|techspot|versus|gizbot|digit|indianexpress|hindustantimes|economictimes|livemint|yourstory|ndtv gadgets)[^|\-–—]*/gi, "")
     .replace(/\s*[|\-–—]\s*buy online.*$/gi, "")
     .replace(/\s*[|\-–—]\s*best price.*$/gi, "")
@@ -40,8 +43,89 @@ function cleanTitle(title) {
 
 function parsePriceValue(price) {
   if (!price) return null;
+
   const match = String(price).replace(/,/g, "").match(/\d+(?:\.\d{1,2})?/);
   return match ? Number(match[0]) : null;
+}
+
+// Main fix: supports all common image field names
+function getProductImage(rec) {
+  if (!rec) return "";
+
+  const image =
+    rec.image ||
+    rec.imageUrl ||
+    rec.image_url ||
+    rec.thumbnail ||
+    rec.thumbnailUrl ||
+    rec.thumbnail_url ||
+    rec.product_image ||
+    rec.productImage ||
+    rec.img ||
+    rec.photo ||
+    rec.picture ||
+    rec.media?.image ||
+    rec.media?.thumbnail ||
+    rec.images?.[0] ||
+    rec.imageLinks?.[0] ||
+    rec.product?.image ||
+    rec.product?.thumbnail ||
+    "";
+
+  if (!image) return "";
+
+  if (typeof image === "string") return image;
+
+  if (typeof image === "object") {
+    return image.url || image.src || image.link || "";
+  }
+
+  return "";
+}
+
+
+function proxiedImageUrl(url) {
+  if (!url) return "";
+  if (/^(data|blob):/i.test(url) || url.startsWith("/")) return url;
+  return `/api/proxy-image?url=${encodeURIComponent(url)}`;
+}
+
+function fallbackImageUrl(source) {
+  if (!source) return "";
+  const domain = String(source).replace(/^https?:\/\//, "").replace(/^www\./, "").split("/")[0];
+  return domain ? `https://www.google.com/s2/favicons?domain=${encodeURIComponent(domain)}&sz=128` : "";
+}
+function ProductImage({ rec, displayTitle, brand, source, className = "" }) {
+  const imageUrl = getProductImage(rec);
+  const candidates = useMemo(
+    () => [proxiedImageUrl(imageUrl), fallbackImageUrl(source)].filter(Boolean),
+    [imageUrl, source]
+  );
+  const [candidateIndex, setCandidateIndex] = useState(0);
+  const activeImage = candidates[candidateIndex] || "";
+
+  useEffect(() => {
+    setCandidateIndex(0);
+  }, [imageUrl, source]);
+
+  if (!activeImage) {
+    return (
+      <div className={`w-full h-full flex items-center justify-center bg-ink-50 text-ink-300 ${className}`}>
+        <ImageOff className="w-8 h-8" aria-hidden="true" />
+      </div>
+    );
+  }
+
+  return (
+    <img
+      key={activeImage}
+      src={activeImage}
+      alt={displayTitle || brand || source || "Product image"}
+      loading="lazy"
+      onError={() => setCandidateIndex((current) => current + 1)}
+      className={`w-full h-full object-contain ${className}`}
+    />
+  );
 }
 
 function StarRating({ score }) {
@@ -50,17 +134,24 @@ function StarRating({ score }) {
   const full = Math.floor(stars);
   const half = stars - full >= 0.4;
   const reviews = Math.round((score || 0) * 8400 + 120);
+
   return (
     <div className="flex items-center gap-1">
       <div className="flex">
-        {[0,1,2,3,4].map((i) => (
-          <Star key={i} className={`w-3 h-3 ${
-            i < full ? "fill-amber-400 text-amber-400"
-            : i === full && half ? "fill-amber-200 text-amber-300"
-            : "text-ink-300"
-          }`} />
+        {[0, 1, 2, 3, 4].map((i) => (
+          <Star
+            key={i}
+            className={`w-3 h-3 ${
+              i < full
+                ? "fill-amber-400 text-amber-400"
+                : i === full && half
+                ? "fill-amber-200 text-amber-300"
+                : "text-ink-300"
+            }`}
+          />
         ))}
       </div>
+
       <span className="text-[11px] text-blue-600 hover:underline cursor-pointer">
         {reviews.toLocaleString()}
       </span>
@@ -68,13 +159,31 @@ function StarRating({ score }) {
   );
 }
 
-// ── Amazon-style product grid card ─────────────────────────────────────────────
+// ── Product Grid Card ──────────────────────────────────────────────────────────
 
-export default function ProductCard({ rec, index, selected, onToggleCompare, onOpenTrackify }) {
-  const { title, url, source, snippet, price, image, score, reason } = rec;
+export default function ProductCard({
+  rec,
+  index = 0,
+  selected = false,
+  onToggleCompare,
+  onOpenTrackify,
+}) {
+  const {
+    title,
+    url,
+    source,
+    snippet,
+    price,
+    score,
+    reason,
+  } = rec || {};
+
   const currentPrice = useMemo(() => parsePriceValue(price), [price]);
   const displayTitle = useMemo(() => cleanTitle(title), [title]);
   const brand = useMemo(() => extractBrand(displayTitle), [displayTitle]);
+  const imageUrl = getProductImage(rec);
+
+  const productUrl = url || "#";
 
   return (
     <motion.article
@@ -85,55 +194,60 @@ export default function ProductCard({ rec, index, selected, onToggleCompare, onO
     >
       {/* Image area */}
       <a
-        href={url}
+        href={productUrl}
         target="_blank"
         rel="noopener noreferrer"
         className="block relative bg-white border-b border-ink-100 overflow-hidden"
         style={{ aspectRatio: "1 / 1" }}
       >
-        {image ? (
-          <img
-            src={image}
-            alt={displayTitle}
-            loading="lazy"
-            referrerPolicy="no-referrer"
-            onError={(e) => { e.currentTarget.style.display = "none"; }}
-            className="w-full h-full object-contain p-4 transition-transform duration-500 group-hover/card:scale-[1.05]"
-          />
-        ) : (
-          <div className="w-full h-full flex items-center justify-center bg-ink-50">
-            <span className="font-display italic text-5xl text-ink-200">
-              {brand ? brand.charAt(0) : (source || "?").charAt(0).toUpperCase()}
-            </span>
-          </div>
-        )}
+        <ProductImage
+          rec={rec}
+          displayTitle={displayTitle}
+          brand={brand}
+          source={source}
+          className="p-4 transition-transform duration-500 group-hover/card:scale-[1.05]"
+        />
 
         {/* Score badge */}
         <div className="absolute top-2 right-2">
-          <span
-            className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full text-white"
-            style={{ background: "rgba(17, 24, 39, 0.78)" }}
-          >
+          <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-ink-800/80 text-white">
             {Math.round((score || 0) * 100)}% match
           </span>
         </div>
 
-        {/* Action buttons top-left */}
+        {/* Action buttons */}
         <div className="absolute top-2 left-2 flex flex-col gap-1.5 opacity-0 group-hover/card:opacity-100 transition-opacity">
           <motion.button
+            type="button"
             whileTap={{ scale: 0.9 }}
-            onClick={(e) => { e.preventDefault(); onOpenTrackify?.({ title: displayTitle, url, source: source || "Web", image, current_price: currentPrice }); }}
+            onClick={(e) => {
+              e.preventDefault();
+              onOpenTrackify?.({
+                title: displayTitle,
+                url: productUrl,
+                source: source || "Web",
+                image: imageUrl,
+                current_price: currentPrice,
+              });
+            }}
             title="Track price"
             className="w-7 h-7 rounded-full flex items-center justify-center bg-white border border-ink-200 shadow text-ink-500 hover:text-forest-600"
           >
             <BellRing className="w-3.5 h-3.5" />
           </motion.button>
+
           <motion.button
+            type="button"
             whileTap={{ scale: 0.9 }}
-            onClick={(e) => { e.preventDefault(); onToggleCompare(); }}
+            onClick={(e) => {
+              e.preventDefault();
+              onToggleCompare?.();
+            }}
             title={selected ? "Remove from compare" : "Add to compare"}
             className={`w-7 h-7 rounded-full flex items-center justify-center border shadow transition ${
-              selected ? "bg-forest-500 border-forest-500 text-white" : "bg-white border-ink-200 text-ink-500 hover:text-ink-900"
+              selected
+                ? "bg-forest-500 border-forest-500 text-white"
+                : "bg-white border-ink-200 text-ink-500 hover:text-ink-900"
             }`}
           >
             {selected ? <Check className="w-3.5 h-3.5" /> : <Plus className="w-3.5 h-3.5" />}
@@ -144,16 +258,18 @@ export default function ProductCard({ rec, index, selected, onToggleCompare, onO
       {/* Details */}
       <div className="p-3 flex flex-col gap-1.5 flex-1">
         {brand && (
-          <span className="text-[11px] font-semibold text-ink-400 uppercase tracking-wide">{brand}</span>
+          <span className="text-[11px] font-semibold text-ink-400 uppercase tracking-wide">
+            {brand}
+          </span>
         )}
 
         <a
-          href={url}
+          href={productUrl}
           target="_blank"
           rel="noopener noreferrer"
           className="text-[13px] leading-snug text-ink-800 hover:text-blue-700 line-clamp-2 font-medium"
         >
-          {displayTitle}
+          {displayTitle || "Untitled Product"}
         </a>
 
         <StarRating score={score} />
@@ -173,7 +289,7 @@ export default function ProductCard({ rec, index, selected, onToggleCompare, onO
         )}
 
         <a
-          href={url}
+          href={productUrl}
           target="_blank"
           rel="noopener noreferrer"
           className="mt-auto pt-2 flex items-center gap-1 text-[11px] font-medium text-blue-600 hover:text-blue-800"
@@ -186,14 +302,30 @@ export default function ProductCard({ rec, index, selected, onToggleCompare, onO
   );
 }
 
+// ── Pick Card ──────────────────────────────────────────────────────────────────
 
-// ── Pick card (LuMen Picks section) ────────────────────────────────────────────
+export function PickCard({
+  rec,
+  rank = 0,
+  selected = false,
+  onToggleCompare,
+  onOpenTrackify,
+}) {
+  const {
+    title,
+    url,
+    source,
+    price,
+    score,
+    reason,
+  } = rec || {};
 
-export function PickCard({ rec, rank, selected, onToggleCompare, onOpenTrackify }) {
-  const { title, url, source, price, image, score, reason } = rec;
   const currentPrice = useMemo(() => parsePriceValue(price), [price]);
   const displayTitle = useMemo(() => cleanTitle(title), [title]);
   const brand = useMemo(() => extractBrand(displayTitle), [displayTitle]);
+  const imageUrl = getProductImage(rec);
+
+  const productUrl = url || "#";
 
   const labels = ["Best Pick", "Runner Up", "3rd Place"];
   const accentColors = [
@@ -207,38 +339,48 @@ export function PickCard({ rec, rank, selected, onToggleCompare, onOpenTrackify 
       initial={{ opacity: 0, x: -10 }}
       animate={{ opacity: 1, x: 0 }}
       transition={{ duration: 0.3, delay: rank * 0.07 }}
-      className={`card flex gap-4 p-4 border-l-4 hover:shadow-lift transition-shadow ${accentColors[rank] || "border-ink-200"}`}
+      className={`card flex gap-4 p-4 border-l-4 hover:shadow-lift transition-shadow ${
+        accentColors[rank] || "border-ink-200"
+      }`}
     >
       {/* Image */}
-      <a href={url} target="_blank" rel="noopener noreferrer"
-        className="shrink-0 w-[100px] h-[100px] bg-white rounded-lg border border-ink-200 flex items-center justify-center overflow-hidden">
-        {image
-          ? <img src={image} alt={displayTitle} loading="lazy" referrerPolicy="no-referrer"
-              onError={(e) => { e.currentTarget.style.display = "none"; }}
-              className="w-full h-full object-contain p-2" />
-          : <span className="font-display italic text-3xl text-ink-300">
-              {brand ? brand.charAt(0) : (source || "?").charAt(0).toUpperCase()}
-            </span>
-        }
+      <a
+        href={productUrl}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="shrink-0 w-[100px] h-[100px] bg-white rounded-lg border border-ink-200 flex items-center justify-center overflow-hidden"
+      >
+        <ProductImage
+          rec={rec}
+          displayTitle={displayTitle}
+          brand={brand}
+          source={source}
+          className="p-2"
+        />
       </a>
 
       {/* Content */}
       <div className="flex-1 min-w-0 flex flex-col gap-1.5">
         <div className="flex items-center gap-2">
           <span className="text-xs font-bold text-ink-500">#{rank + 1}</span>
-          <span
-            className="text-[10px] font-bold px-2 py-0.5 rounded-full text-white"
-            style={{ background: "rgba(17, 24, 39, 0.85)" }}
-          >
+          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-ink-800 text-white">
             {labels[rank] || `#${rank + 1}`}
           </span>
         </div>
 
-        {brand && <span className="text-[10px] font-semibold text-ink-400 uppercase tracking-wide">{brand}</span>}
+        {brand && (
+          <span className="text-[10px] font-semibold text-ink-400 uppercase tracking-wide">
+            {brand}
+          </span>
+        )}
 
-        <a href={url} target="_blank" rel="noopener noreferrer"
-          className="font-semibold text-sm leading-snug text-ink-800 hover:text-blue-700 hover:underline line-clamp-2">
-          {displayTitle}
+        <a
+          href={productUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="font-semibold text-sm leading-snug text-ink-800 hover:text-blue-700 hover:underline line-clamp-2"
+        >
+          {displayTitle || "Untitled Product"}
         </a>
 
         <StarRating score={score} />
@@ -254,20 +396,42 @@ export function PickCard({ rec, rank, selected, onToggleCompare, onOpenTrackify 
 
       {/* Actions */}
       <div className="shrink-0 flex flex-col items-center gap-2 pt-1">
-        <a href={url} target="_blank" rel="noopener noreferrer"
-          className="text-ink-500 hover:text-blue-600 transition-colors">
+        <a
+          href={productUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-ink-500 hover:text-blue-600 transition-colors"
+        >
           <ArrowUpRight className="w-4 h-4" />
         </a>
-        <motion.button whileTap={{ scale: 0.9 }}
-          onClick={() => onOpenTrackify?.({ title: displayTitle, url, source: source || "Web", image, current_price: currentPrice })}
-          className="w-7 h-7 rounded-full border bg-white border-ink-200 flex items-center justify-center text-ink-500 hover:text-forest-600 transition">
+
+        <motion.button
+          type="button"
+          whileTap={{ scale: 0.9 }}
+          onClick={() =>
+            onOpenTrackify?.({
+              title: displayTitle,
+              url: productUrl,
+              source: source || "Web",
+              image: imageUrl,
+              current_price: currentPrice,
+            })
+          }
+          className="w-7 h-7 rounded-full border bg-white border-ink-200 flex items-center justify-center text-ink-500 hover:text-forest-600 transition"
+        >
           <BellRing className="w-3.5 h-3.5" />
         </motion.button>
-        <motion.button whileTap={{ scale: 0.9 }}
-          onClick={() => onToggleCompare()}
+
+        <motion.button
+          type="button"
+          whileTap={{ scale: 0.9 }}
+          onClick={() => onToggleCompare?.()}
           className={`w-7 h-7 rounded-full border flex items-center justify-center transition ${
-            selected ? "bg-forest-500 border-forest-500 text-white" : "bg-white border-ink-200 text-ink-500 hover:text-ink-900"
-          }`}>
+            selected
+              ? "bg-forest-500 border-forest-500 text-white"
+              : "bg-white border-ink-200 text-ink-500 hover:text-ink-900"
+          }`}
+        >
           {selected ? <Check className="w-3.5 h-3.5" /> : <Plus className="w-3.5 h-3.5" />}
         </motion.button>
       </div>

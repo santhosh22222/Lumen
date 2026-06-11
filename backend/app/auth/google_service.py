@@ -13,9 +13,8 @@ GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID", "")
 def verify_google_token(credential: str) -> Optional[dict]:
     """Verify the Google ID token and return user info dict, or None on failure."""
     if not GOOGLE_CLIENT_ID:
-        # No client ID configured — decode without verification for local dev
-        log.warning("GOOGLE_CLIENT_ID not set; skipping signature verification (dev only)")
-        return _decode_without_verify(credential)
+        log.warning("GOOGLE_CLIENT_ID is not set; Google sign-in is disabled")
+        return None
 
     try:
         from google.oauth2 import id_token
@@ -34,28 +33,6 @@ def verify_google_token(credential: str) -> Optional[dict]:
         }
     except Exception as exc:
         log.warning("Google token verification failed: %s", exc)
-        return None
-
-
-def _decode_without_verify(credential: str) -> Optional[dict]:
-    """Decode JWT payload without signature check — DEV ONLY."""
-    import base64
-    import json
-
-    try:
-        parts = credential.split(".")
-        if len(parts) < 2:
-            return None
-        padded = parts[1] + "=" * (-len(parts[1]) % 4)
-        payload = json.loads(base64.urlsafe_b64decode(padded).decode())
-        return {
-            "email": payload.get("email", ""),
-            "name": payload.get("name", payload.get("email", "").split("@")[0]),
-            "avatar_url": payload.get("picture"),
-            "google_sub": payload.get("sub", ""),
-        }
-    except Exception as exc:
-        log.warning("Could not decode Google JWT: %s", exc)
         return None
 
 

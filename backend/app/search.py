@@ -41,6 +41,21 @@ def _domain(url: str) -> str:
         return ""
 
 
+def _clean_image_url(url: str | None) -> str:
+    if not url:
+        return ""
+    cleaned = str(url).strip()
+    for marker in ("/https://", "/http://"):
+        marker_index = cleaned.find(marker)
+        if marker_index > 0:
+            cleaned = cleaned[marker_index + 1 :]
+            break
+    first_query = cleaned.find("?")
+    if first_query != -1:
+        cleaned = cleaned[: first_query + 1] + cleaned[first_query + 1 :].replace("?", "&")
+    return cleaned
+
+
 class SearchClient:
     def __init__(self) -> None:
         self.provider = settings.search_provider
@@ -90,31 +105,38 @@ class SearchClient:
             data = r.json()
 
         images: list[str] = []
+        seen_images: set[str] = set()
         for img in (data.get("images") or []):
             if isinstance(img, str):
-                images.append(img)
+                u = _clean_image_url(img)
             elif isinstance(img, dict):
-                u = img.get("url") or ""
-                if u:
-                    images.append(u)
+                u = _clean_image_url(img.get("url"))
+            else:
+                u = ""
+            if u and u not in seen_images:
+                seen_images.add(u)
+                images.append(u)
 
         hits: List[SearchHit] = []
-        for item in data.get("results", []):
+        for result_index, item in enumerate(data.get("results", [])):
             url_ = item.get("url") or ""
             if not url_:
                 continue
 
             # Prefer the per-result image Tavily sometimes includes directly
-            image: Optional[str] = item.get("image") or None
+            image: Optional[str] = _clean_image_url(item.get("image")) or None
 
-            # If no per-result image, try to find a domain-matched image from
-            # the global images pool (much better than positional assignment)
+            # If no per-result image, first try a domain match, then fall back
+            # to Tavily's image pool by result position so the UI still gets a
+            # real visual instead of an empty/letter placeholder.
             if not image:
                 result_domain = _domain(url_)
                 for img_url in images:
                     if result_domain and result_domain in img_url:
                         image = img_url
                         break
+            if not image and images:
+                image = images[result_index % len(images)]
 
             hits.append(
                 SearchHit(

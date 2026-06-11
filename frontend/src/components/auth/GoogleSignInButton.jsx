@@ -68,27 +68,6 @@ export default function GoogleSignInButton({ onSuccess, loading }) {
     }
   }, [sdkReady]);
 
-  const handleDevBypass = () => {
-    try {
-      const header = { alg: "none", typ: "JWT" };
-      const payload = {
-        email: "google-dev-user@gmail.com",
-        name: "Google Dev User",
-        picture: "https://lh3.googleusercontent.com/a/default-user=s96-c",
-        sub: "mock_google_sub_123456789",
-      };
-      const base64UrlEncode = (obj) => {
-        const str = JSON.stringify(obj);
-        const base64 = btoa(unescape(encodeURIComponent(str)));
-        return base64.replace(/=/g, "").replace(/\+/g, "-").replace(/\//g, "_");
-      };
-      const token = `${base64UrlEncode(header)}.${base64UrlEncode(payload)}.mock-signature`;
-      onSuccess(token);
-    } catch (err) {
-      console.error("Failed to generate mock token:", err);
-    }
-  };
-
   if (sdkError) {
     return (
       <div className="space-y-1">
@@ -110,12 +89,12 @@ export default function GoogleSignInButton({ onSuccess, loading }) {
       <div className="space-y-2">
         <button
           type="button"
-          onClick={handleDevBypass}
-          className="w-full flex items-center justify-center gap-3 py-3 rounded-full text-sm font-medium border border-ink-200 bg-paper-50 hover:bg-ink-100 text-ink-800 transition-all active:scale-[0.98]"
-          title="Click to sign in with a simulated Google Developer Account"
+          disabled
+          className="w-full flex items-center justify-center gap-3 py-3 rounded-full text-sm font-medium border border-ink-200 bg-paper-100 text-ink-400 cursor-not-allowed"
+          title="Set VITE_GOOGLE_CLIENT_ID to enable Google Sign-In"
         >
           <GoogleIcon className="w-4 h-4" />
-          Continue with Google <span className="text-xs text-coral-500 font-semibold">(Dev Bypass)</span>
+          Continue with Google
         </button>
         <p className="text-center text-[10px]" style={{ color: "rgb(var(--ink-400))" }}>
           Simulating Google Sign-In locally. Set <code className="font-mono bg-ink-100 text-ink-700 px-1 rounded text-[10px]">VITE_GOOGLE_CLIENT_ID</code> to use real Google accounts.

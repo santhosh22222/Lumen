@@ -1,22 +1,21 @@
-# Python
+# env / secrets
+.env
+.env.local
+.env.*.local
+backend/.env
+frontend/.env
+
+# node
+node_modules/
+frontend/node_modules/
+dist/
+frontend/dist/
+
+# python
+.venv/
+backend/.venv/
 __pycache__/
 *.pyc
-.venv/
-venv/
-.env
-*.sqlite3
-*.db
 
-# Node
-node_modules/
-dist/
-.vite/
-*.log
-
-# Editors / OS
-.vscode/
-.idea/
+# mac
 .DS_Store
-Thumbs.db
-.vercel
-render.yaml
