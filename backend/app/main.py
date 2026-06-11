@@ -2,9 +2,12 @@
 from __future__ import annotations
 
 import logging
+from urllib.parse import unquote
 
+import httpx
 from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import Response
 
 from .config import settings
 from .llm import llm
@@ -66,6 +69,63 @@ async def health() -> HealthResponse:
         search_provider=settings.search_provider,
         firecrawl_enabled=bool(settings.firecrawl_api_key),
     )
+
+
+# ── Image Proxy ───────────────────────────────────────────────────────────────
+# Fetches product images server-side so the browser never hits Amazon/Flipkart
+# CDNs directly (which block hotlinking from localhost / foreign referers).
+def _clean_proxy_image_url(url: str) -> str:
+    cleaned = unquote(url).strip()
+    for marker in ("/https://", "/http://"):
+        marker_index = cleaned.find(marker)
+        if marker_index > 0:
+            cleaned = cleaned[marker_index + 1 :]
+            break
+    first_query = cleaned.find("?")
+    if first_query != -1:
+        cleaned = cleaned[: first_query + 1] + cleaned[first_query + 1 :].replace("?", "&")
+    return cleaned
+
+
+@app.get("/api/proxy-image")
+async def proxy_image(url: str) -> Response:
+    """Proxy a remote product image to avoid CORS / hotlink restrictions."""
+    if not url:
+        raise HTTPException(status_code=400, detail="url param is required")
+    url = _clean_proxy_image_url(url)
+
+    # Determine referer from the URL so each CDN gets its own valid referer
+    if "amazon" in url:
+        referer = "https://www.amazon.in/"
+    elif "flipkart" in url:
+        referer = "https://www.flipkart.com/"
+    else:
+        referer = "https://www.google.com/"
+
+    try:
+        async with httpx.AsyncClient(timeout=10.0, follow_redirects=True) as client:
+            r = await client.get(
+                url,
+                headers={
+                    "User-Agent": (
+                        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                        "AppleWebKit/537.36 (KHTML, like Gecko) "
+                        "Chrome/124.0.0.0 Safari/537.36"
+                    ),
+                    "Referer": referer,
+                    "Accept": "image/webp,image/apng,image/*,*/*;q=0.8",
+                },
+            )
+            r.raise_for_status()
+            content_type = r.headers.get("content-type", "image/jpeg")
+            return Response(content=r.content, media_type=content_type)
+    except httpx.HTTPStatusError as exc:
+        log.warning("proxy-image upstream error %s for %s", exc.response.status_code, url)
+        raise HTTPException(status_code=502, detail="Upstream image error") from exc
+    except Exception as exc:
+        log.warning("proxy-image failed for %s: %s", url, exc)
+        raise HTTPException(status_code=502, detail="Could not fetch image") from exc
+# ─────────────────────────────────────────────────────────────────────────────
 
 
 @app.post("/api/recommend", response_model=RecommendResponse)

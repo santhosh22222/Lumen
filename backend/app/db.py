@@ -7,11 +7,15 @@ Set MONGODB_URI in .env, e.g.:
 from __future__ import annotations
 
 import os
+import logging
 from functools import lru_cache
 
 from pymongo import MongoClient
 from pymongo.collection import Collection
 from pymongo.database import Database
+from pymongo.errors import PyMongoError
+
+log = logging.getLogger("lumen")
 
 
 class DBError(RuntimeError):
@@ -21,17 +25,31 @@ class DBError(RuntimeError):
 @lru_cache(maxsize=1)
 def _client() -> MongoClient:
     uri = (os.getenv("MONGODB_URI") or "").strip()
+    require_mongo = (os.getenv("REQUIRE_REAL_MONGO") or "").strip().lower() in {"1", "true", "yes"}
     if not uri:
-        try:
-            import mongomock
-            import logging
-            logging.getLogger("lumen").warning("MONGODB_URI not found. Falling back to in-memory mongomock database.")
-            return mongomock.MongoClient()
-        except ImportError:
-            raise DBError(
-                "MONGODB_URI is not set. Add your MongoDB Atlas connection string to backend/.env"
-            )
-    return MongoClient(uri, serverSelectionTimeoutMS=8000)
+        if require_mongo:
+            raise DBError("MONGODB_URI is not set. Add your MongoDB connection string to backend/.env")
+        return _mock_client("MONGODB_URI not found")
+    client = MongoClient(uri, serverSelectionTimeoutMS=3000)
+    try:
+        client.admin.command("ping")
+    except PyMongoError as exc:
+        client.close()
+        if require_mongo:
+            raise DBError(f"Could not connect to MongoDB: {exc}") from exc
+        return _mock_client(f"MongoDB unavailable ({exc})")
+    return client
+
+
+def _mock_client(reason: str) -> MongoClient:
+    try:
+        import mongomock
+    except ImportError as exc:
+        raise DBError(
+            f"{reason}. Install mongomock or configure a reachable MONGODB_URI."
+        ) from exc
+    log.warning("%s. Falling back to in-memory mongomock database.", reason)
+    return mongomock.MongoClient()
 
 
 def get_db() -> Database:
