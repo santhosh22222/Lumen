@@ -27,6 +27,8 @@ class Settings:
     # LLM
     groq_api_key: Optional[str]
     groq_model: str
+    opencode_api_key: Optional[str]
+    opencode_model: str
     openai_api_key: Optional[str]
     openai_model: str
     gemini_api_key: Optional[str]
@@ -49,6 +51,8 @@ class Settings:
         # Order = preference when multiple keys are present.
         if self.groq_api_key:
             return "groq"
+        if self.opencode_api_key:
+            return "opencode"
         if self.openai_api_key:
             return "openai"
         if self.gemini_api_key:
@@ -62,6 +66,8 @@ class Settings:
         provider = self.llm_provider
         if provider == "groq":
             return self.groq_model
+        if provider == "opencode":
+            return self.opencode_model
         if provider == "openai":
             return self.openai_model
         if provider == "gemini":
@@ -84,7 +90,9 @@ def load_settings() -> Settings:
     origins = [o.strip() for o in origins_raw.split(",") if o.strip()]
     return Settings(
         groq_api_key=_env("GROQ_API_KEY"),
-        groq_model=_env("GROQ_MODEL", "openai/gpt-oss-120b") or "openai/gpt-oss-120b",
+        groq_model=_env("GROQ_MODEL", "llama-3.3-70b-versatile") or "llama-3.3-70b-versatile",
+        opencode_api_key=_env("OPENCODE_API_KEY"),
+        opencode_model=(_env("OPENCODE_MODEL", "big-pickle") or "big-pickle").strip().lower().replace(" ", "-"),
         openai_api_key=_env("OPENAI_API_KEY"),
         openai_model=_env("OPENAI_MODEL", "gpt-4o-mini") or "gpt-4o-mini",
         gemini_api_key=_env("GEMINI_API_KEY"),

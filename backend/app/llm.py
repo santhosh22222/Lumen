@@ -5,14 +5,17 @@ The provider is auto-selected from environment variables.
 """
 from __future__ import annotations
 
+import asyncio
 import json
+import logging
 import re
 from typing import Any, Dict, Optional
 
 import httpx
-from tenacity import retry, stop_after_attempt, wait_exponential
 
 from .config import settings
+
+log = logging.getLogger(__name__)
 
 
 class LLMError(RuntimeError):
@@ -55,11 +58,40 @@ class LLMClient:
     def enabled(self) -> bool:
         return self.provider is not None
 
-    @retry(
-        stop=stop_after_attempt(3),
-        wait=wait_exponential(multiplier=0.5, min=0.5, max=4),
-        reraise=True,
-    )
+    def _available_providers(self) -> list[str]:
+        """All providers with a configured key, primary first."""
+        order = []
+        if settings.groq_api_key:
+            order.append("groq")
+        if settings.opencode_api_key:
+            order.append("opencode")
+        if settings.gemini_api_key:
+            order.append("gemini")
+        if settings.openai_api_key:
+            order.append("openai")
+        if settings.anthropic_api_key:
+            order.append("anthropic")
+        # Put the configured primary provider first
+        if self.provider in order:
+            order.remove(self.provider)
+            order.insert(0, self.provider)
+        return order
+
+    async def _call_provider(
+        self, provider: str, system: str, user: str, temperature: float, max_tokens: int
+    ) -> Dict[str, Any]:
+        if provider == "openai":
+            return await self._openai(system, user, temperature, max_tokens)
+        if provider == "groq":
+            return await self._groq(system, user, temperature, max_tokens)
+        if provider == "opencode":
+            return await self._opencode(system, user, temperature, max_tokens)
+        if provider == "gemini":
+            return await self._gemini(system, user, temperature, max_tokens)
+        if provider == "anthropic":
+            return await self._anthropic(system, user, temperature, max_tokens)
+        raise LLMError(f"Unsupported provider: {provider}")
+
     async def chat_json(
         self,
         system: str,
@@ -71,15 +103,34 @@ class LLMClient:
         if not self.enabled:
             raise LLMError("No LLM provider configured. Set an API key in .env.")
 
-        if self.provider == "openai":
-            return await self._openai(system, user, temperature, max_tokens)
-        if self.provider == "groq":
-            return await self._groq(system, user, temperature, max_tokens)
-        if self.provider == "gemini":
-            return await self._gemini(system, user, temperature, max_tokens)
-        if self.provider == "anthropic":
-            return await self._anthropic(system, user, temperature, max_tokens)
-        raise LLMError(f"Unsupported provider: {self.provider}")
+        providers = self._available_providers()
+        last_exc: Exception | None = None
+
+        for provider in providers:
+            try:
+                try:
+                    return await self._call_provider(provider, system, user, temperature, max_tokens)
+                except httpx.HTTPStatusError as exc:
+                    if exc.response.status_code == 429:
+                        # Rate limited — try one short Retry-After wait, then move on
+                        retry_after = exc.response.headers.get("retry-after")
+                        try:
+                            wait_s = min(float(retry_after), 15.0) if retry_after else 5.0
+                        except ValueError:
+                            wait_s = 5.0
+                        log.warning("%s rate-limited (429); retrying in %.0fs", provider, wait_s)
+                        await asyncio.sleep(wait_s)
+                        return await self._call_provider(provider, system, user, temperature, max_tokens)
+                    else:
+                        raise
+            except Exception as exc:
+                log.warning("%s failed (%s); falling back to next provider", provider, exc)
+                last_exc = exc
+                continue
+
+        raise LLMError(
+            f"All LLM providers failed. Last error: {last_exc}"
+        ) from last_exc
 
     # ─── OpenAI ────────────────────────────────────────────────
     async def _openai(
@@ -91,7 +142,7 @@ class LLMClient:
             "Content-Type": "application/json",
         }
         payload = {
-            "model": self.model,
+            "model": settings.openai_model,
             "messages": [
                 {"role": "system", "content": system},
                 {"role": "user", "content": user},
@@ -119,7 +170,7 @@ class LLMClient:
         # Coerce JSON output via prompt; many Groq-hosted models accept
         # response_format too, but the prompt nudge is the reliable path.
         payload: Dict[str, Any] = {
-            "model": self.model,
+            "model": settings.groq_model,
             "messages": [
                 {
                     "role": "system",
@@ -136,9 +187,6 @@ class LLMClient:
             "top_p": 1,
             "stream": False,
         }
-        # gpt-oss models support a reasoning_effort knob.
-        if "gpt-oss" in (self.model or ""):
-            payload["reasoning_effort"] = "medium"
 
         async with httpx.AsyncClient(timeout=90) as client:
             r = await client.post(url, headers=headers, json=payload)
@@ -150,13 +198,59 @@ class LLMClient:
             raise LLMError(f"Unexpected Groq response shape: {data}") from exc
         return _extract_json(content)
 
+    # ─── OpenCode Zen (OpenAI-compatible) ──────────────────────
+    async def _opencode(
+        self, system: str, user: str, temperature: float, max_tokens: int
+    ) -> Dict[str, Any]:
+        url = "https://opencode.ai/zen/v1/responses"
+        headers = {
+            "Authorization": f"Bearer {settings.opencode_api_key}",
+            "Content-Type": "application/json",
+        }
+        payload = {
+            "model": settings.opencode_model,
+            "messages": [
+                {
+                    "role": "system",
+                    "content": (
+                        system
+                        + "\n\nRespond ONLY with a single valid JSON object. "
+                        "No prose, no markdown, no code fences."
+                    ),
+                },
+                {"role": "user", "content": user},
+            ],
+            "temperature": temperature,
+            "max_tokens": max_tokens,
+        }
+        async with httpx.AsyncClient(timeout=90) as client:
+            r = await client.post(url, headers=headers, json=payload)
+            r.raise_for_status()
+            data = r.json()
+        
+        content = None
+        if "choices" in data:
+            content = data["choices"][0]["message"]["content"]
+        elif "output" in data:
+            if isinstance(data["output"], list) and len(data["output"]) > 0:
+                if "message" in data["output"][0]:
+                    content = data["output"][0]["message"]["content"]
+                elif "content" in data["output"][0]:
+                    content = data["output"][0]["content"]
+            elif isinstance(data["output"], str):
+                content = data["output"]
+        
+        if content is None:
+            raise LLMError(f"Unexpected OpenCode response shape: {data}")
+        return _extract_json(content)
+
     # ─── Gemini ────────────────────────────────────────────────
     async def _gemini(
         self, system: str, user: str, temperature: float, max_tokens: int
     ) -> Dict[str, Any]:
         url = (
             f"https://generativelanguage.googleapis.com/v1beta/models/"
-            f"{self.model}:generateContent?key={settings.gemini_api_key}"
+            f"{settings.gemini_model}:generateContent?key={settings.gemini_api_key}"
         )
         payload = {
             "system_instruction": {"parts": [{"text": system}]},
@@ -188,7 +282,7 @@ class LLMClient:
             "Content-Type": "application/json",
         }
         payload = {
-            "model": self.model,
+            "model": settings.anthropic_model,
             "system": system + "\n\nReturn ONLY a single valid JSON object.",
             "messages": [{"role": "user", "content": user}],
             "temperature": temperature,

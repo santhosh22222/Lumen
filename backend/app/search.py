@@ -54,41 +54,68 @@ class SearchClient:
         wait=wait_exponential(multiplier=0.5, min=0.5, max=4),
         reraise=True,
     )
-    async def search(self, query: str, *, max_results: int = 8) -> List[SearchHit]:
+    async def search(
+        self,
+        query: str,
+        *,
+        max_results: int = 8,
+        include_domains: Optional[List[str]] = None,
+    ) -> List[SearchHit]:
         if not self.enabled:
             raise SearchError("No search provider configured. Set TAVILY_API_KEY or SERPAPI_API_KEY.")
         if self.provider == "tavily":
-            return await self._tavily(query, max_results)
+            return await self._tavily(query, max_results, include_domains=include_domains)
         if self.provider == "serpapi":
             return await self._serpapi(query, max_results)
         raise SearchError(f"Unsupported search provider: {self.provider}")
 
     # ─── Tavily ────────────────────────────────────────────────
-    async def _tavily(self, query: str, max_results: int) -> List[SearchHit]:
+    async def _tavily(
+        self, query: str, max_results: int, include_domains: Optional[List[str]] = None
+    ) -> List[SearchHit]:
         url = "https://api.tavily.com/search"
         payload = {
             "api_key": settings.tavily_api_key,
             "query": query,
-            "search_depth": "basic",
+            "search_depth": "advanced",
             "include_images": True,
             "include_answer": False,
             "max_results": max_results,
         }
+        if include_domains:
+            payload["include_domains"] = include_domains
         async with httpx.AsyncClient(timeout=30) as client:
             r = await client.post(url, json=payload)
             r.raise_for_status()
             data = r.json()
 
-        images = data.get("images") or []
+        images: list[str] = []
+        for img in (data.get("images") or []):
+            if isinstance(img, str):
+                images.append(img)
+            elif isinstance(img, dict):
+                u = img.get("url") or ""
+                if u:
+                    images.append(u)
+
         hits: List[SearchHit] = []
-        for i, item in enumerate(data.get("results", [])):
+        for item in data.get("results", []):
             url_ = item.get("url") or ""
             if not url_:
                 continue
-            image: Optional[str] = None
-            if i < len(images):
-                img = images[i]
-                image = img if isinstance(img, str) else img.get("url")
+
+            # Prefer the per-result image Tavily sometimes includes directly
+            image: Optional[str] = item.get("image") or None
+
+            # If no per-result image, try to find a domain-matched image from
+            # the global images pool (much better than positional assignment)
+            if not image:
+                result_domain = _domain(url_)
+                for img_url in images:
+                    if result_domain and result_domain in img_url:
+                        image = img_url
+                        break
+
             hits.append(
                 SearchHit(
                     title=item.get("title", "").strip() or url_,
@@ -99,6 +126,7 @@ class SearchClient:
                 )
             )
         return hits
+
 
     # ─── SerpAPI ───────────────────────────────────────────────
     async def _serpapi(self, query: str, max_results: int) -> List[SearchHit]:

@@ -12,6 +12,7 @@ import {
   Award,
   AlertTriangle,
   RotateCcw,
+  BellRing,
 } from "lucide-react";
 import { compare as runCompare } from "../api.js";
 
@@ -23,6 +24,8 @@ export default function CompareDrawer({
   onClose,
   onRemove,
   onClear,
+  onStartCopilotChat,
+  onOpenTrackify,
 }) {
   const [deep, setDeep] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -64,7 +67,7 @@ export default function CompareDrawer({
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
           onClick={onClose}
-          className="fixed inset-0 z-50 bg-ink-900/40 backdrop-blur-[3px]"
+          className="fixed inset-0 z-50 modal-overlay backdrop-blur-[3px]"
         >
           <motion.aside
             key="panel"
@@ -86,6 +89,8 @@ export default function CompareDrawer({
               onClear={onClear}
               onClose={onClose}
               onReset={() => setResult(null)}
+              onStartCopilotChat={onStartCopilotChat}
+              items={items}
             />
 
             <div className="flex-1 overflow-auto">
@@ -99,7 +104,7 @@ export default function CompareDrawer({
               {loading && <LoadingPanel deep={deep && canDeep} />}
 
               {!loading && !result && (
-                <PinnedList items={items} onRemove={onRemove} />
+                <PinnedList items={items} onRemove={onRemove} onOpenTrackify={onOpenTrackify} onClose={onClose} />
               )}
 
               {!loading && result && (
@@ -124,6 +129,8 @@ function Header({
   onClear,
   onClose,
   onReset,
+  onStartCopilotChat,
+  items,
 }) {
   return (
     <div className="flex items-center justify-between gap-4 p-5 border-b border-ink-200 bg-paper-50/95 backdrop-blur sticky top-0 z-10">
@@ -164,6 +171,21 @@ function Header({
           </button>
         )}
 
+        {count >= 2 && !loading && (
+          <button
+            onClick={() => {
+              const titles = items.map((it) => it.title).join(" vs ");
+              onStartCopilotChat(`Analyze and compare these products: ${titles}. Which one should I buy and why?`);
+              onClose();
+            }}
+            className="btn-ghost flex items-center gap-1.5 border border-forest-200 dark:border-forest-800/40 text-forest-600 dark:text-forest-400 hover:bg-forest-50/50 dark:hover:bg-forest-950/20"
+            title="Discuss this comparison with Copilot"
+          >
+            <Sparkles className="w-4 h-4 text-forest-500 dark:text-forest-400" />
+            Ask Copilot
+          </button>
+        )}
+
         {!hasResult && count > 0 && (
           <button onClick={onClear} className="btn-ghost" title="Clear all">
             <Trash2 className="w-4 h-4" />
@@ -178,7 +200,7 @@ function Header({
   );
 }
 
-function PinnedList({ items, onRemove }) {
+function PinnedList({ items, onRemove, onOpenTrackify, onClose }) {
   if (items.length === 0) {
     return (
       <div className="m-8 max-w-xl">
@@ -225,7 +247,7 @@ function PinnedList({ items, onRemove }) {
               <h3 className="font-display text-lg text-ink-800 leading-tight mt-1 line-clamp-2">
                 {it.title}
               </h3>
-              <div className="mt-2 flex items-center gap-2">
+              <div className="mt-2 flex items-center gap-2.5">
                 <a
                   href={it.url}
                   target="_blank"
@@ -234,6 +256,24 @@ function PinnedList({ items, onRemove }) {
                 >
                   Open <ArrowUpRight className="w-3.5 h-3.5" />
                 </a>
+                <button
+                  onClick={() => {
+                    const match = it.price ? String(it.price).replace(/,/g, "").match(/\d+(?:\.\d{1,2})?/) : null;
+                    const numericPrice = match ? Number(match[0]) : null;
+                    onOpenTrackify({
+                      title: it.title,
+                      url: it.url,
+                      source: it.source || "Web",
+                      image: it.image || null,
+                      current_price: numericPrice,
+                    });
+                    onClose();
+                  }}
+                  className="text-xs text-ink-400 hover:text-forest-600 flex items-center gap-0.5"
+                  title="Track this product price"
+                >
+                  <BellRing className="w-3 h-3" /> Track
+                </button>
                 <button
                   onClick={() => onRemove(it)}
                   className="text-xs text-ink-400 hover:text-coral-500"
