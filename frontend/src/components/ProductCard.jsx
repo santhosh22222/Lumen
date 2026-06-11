@@ -110,7 +110,10 @@ export default function ProductCard({ rec, index, selected, onToggleCompare, onO
 
         {/* Score badge */}
         <div className="absolute top-2 right-2">
-          <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-ink-800/80 text-white">
+          <span
+            className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full text-white"
+            style={{ background: "rgba(17, 24, 39, 0.78)" }}
+          >
             {Math.round((score || 0) * 100)}% match
           </span>
         </div>
@@ -223,7 +226,10 @@ export function PickCard({ rec, rank, selected, onToggleCompare, onOpenTrackify 
       <div className="flex-1 min-w-0 flex flex-col gap-1.5">
         <div className="flex items-center gap-2">
           <span className="text-xs font-bold text-ink-500">#{rank + 1}</span>
-          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-ink-800 text-white">
+          <span
+            className="text-[10px] font-bold px-2 py-0.5 rounded-full text-white"
+            style={{ background: "rgba(17, 24, 39, 0.85)" }}
+          >
             {labels[rank] || `#${rank + 1}`}
           </span>
         </div>
