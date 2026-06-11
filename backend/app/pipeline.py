@@ -260,6 +260,80 @@ async def _rank(query: str, intent: Intent, hits: List[SearchHit], top_k: int) -
 
 # ── Price cap ──────────────────────────────────────────────────────────────────
 
+async def _enrich_images(recs: List[Recommendation]) -> None:
+    """Fill in missing images by fetching each product page's og:image.
+
+    The store's own og:image meta tag is always the right product photo,
+    unlike Tavily's global image pool. Best-effort with a short timeout —
+    a card without an image beats a card with a wrong one.
+    """
+    import httpx as _httpx
+
+    from .trackify.fetcher import USER_AGENT, _image
+
+    targets = [r for r in recs if not r.image]
+    if not targets:
+        return
+
+    headers = {
+        "User-Agent": USER_AGENT,
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        "Accept-Language": "en-US,en;q=0.9",
+    }
+
+    async def fetch_one(client: _httpx.AsyncClient, rec: Recommendation) -> None:
+        try:
+            resp = await client.get(rec.url)
+            if resp.status_code == 200:
+                img = _image(resp.text[:300_000], str(resp.url))
+                if img:
+                    rec.image = img
+        except Exception as exc:
+            log.debug("Image enrich failed for %s: %s", rec.url, exc)
+
+    async with _httpx.AsyncClient(timeout=8, follow_redirects=True, headers=headers) as client:
+        await asyncio.gather(*(fetch_one(client, r) for r in targets))
+
+    # Second stage: sites like Flipkart serve bots a JS shell with no og:image.
+    # For those, run a Tavily image search on the product title — queries are
+    # model-specific so the top image matches the product.
+    still_missing = [r for r in recs if not r.image]
+    if still_missing and settings.tavily_api_key:
+        seen_titles: Dict[str, List[Recommendation]] = {}
+        for r in still_missing:
+            seen_titles.setdefault(r.title.strip().lower(), []).append(r)
+
+        async def image_search(title: str, group: List[Recommendation]) -> None:
+            payload = {
+                "api_key": settings.tavily_api_key,
+                "query": f"{title} product image",
+                "max_results": 1,
+                "include_images": True,
+                "search_depth": "basic",
+            }
+            try:
+                async with _httpx.AsyncClient(timeout=10) as client:
+                    resp = await client.post("https://api.tavily.com/search", json=payload)
+                    resp.raise_for_status()
+                    data = resp.json()
+                imgs = data.get("images") or []
+                img_url = None
+                for img in imgs:
+                    img_url = img if isinstance(img, str) else (img or {}).get("url")
+                    if img_url:
+                        break
+                if img_url:
+                    for rec in group:
+                        rec.image = img_url
+            except Exception as exc:
+                log.debug("Tavily image search failed for %r: %s", title, exc)
+
+        await asyncio.gather(*(image_search(t, g) for t, g in seen_titles.items()))
+
+    log.info("Image enrich: %d/%d products now have images",
+             sum(1 for r in recs if r.image), len(recs))
+
+
 def _apply_price_cap(recs: List[Recommendation], max_price: float | None) -> List[Recommendation]:
     if not max_price:
         return recs
@@ -325,6 +399,8 @@ async def recommend(req: RecommendRequest) -> RecommendResponse:
         )
 
     recs = _apply_price_cap(recs, req.max_price)
+
+    await _enrich_images(recs)
 
     return RecommendResponse(
         query=req.query,
