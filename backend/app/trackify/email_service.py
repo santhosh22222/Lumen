@@ -17,24 +17,68 @@ APP_NAME = "LuMen - Smart Shopping Reader"
 FROM_NAME = "LuMen Team"
 
 
-def _send_message(message: EmailMessage, recipient: str) -> bool:
-    sender = os.getenv("EMAIL_USER")
-    password = os.getenv("EMAIL_PASS")
-    if not sender or not password:
-        log.warning("Email skipped because EMAIL_USER or EMAIL_PASS is missing")
+def _send_via_brevo(subject: str, body: str, recipient: str, sender: str) -> bool:
+    """Send through Brevo's HTTP API (port 443) — works on hosts like Render
+    that block outbound SMTP ports."""
+    import httpx
+
+    api_key = os.getenv("BREVO_API_KEY")
+    if not api_key:
+        return False
+    payload = {
+        "sender": {"name": FROM_NAME, "email": sender},
+        "to": [{"email": recipient}],
+        "subject": subject,
+        "textContent": body,
+    }
+    try:
+        r = httpx.post(
+            "https://api.brevo.com/v3/smtp/email",
+            headers={"api-key": api_key, "content-type": "application/json"},
+            json=payload,
+            timeout=20,
+        )
+        if r.status_code in (200, 201, 202):
+            return True
+        log.error("Brevo send failed (%s): %s", r.status_code, r.text[:300])
+        return False
+    except Exception:
+        log.exception("Brevo request failed for %s", recipient)
         return False
 
+
+def _send_via_smtp(message: EmailMessage, recipient: str, sender: str, password: str) -> bool:
     message["From"] = f"{FROM_NAME} <{sender}>"
     message["To"] = recipient
-
     try:
         with smtplib.SMTP_SSL("smtp.gmail.com", 465, timeout=20) as smtp:
             smtp.login(sender, password)
             smtp.send_message(message)
         return True
     except Exception:
-        log.exception("Failed to send email to %s", recipient)
+        log.exception("SMTP send failed for %s (host may block outbound SMTP)", recipient)
         return False
+
+
+def _send_message(message: EmailMessage, recipient: str) -> bool:
+    sender = os.getenv("EMAIL_USER")
+    password = os.getenv("EMAIL_PASS")
+    if not sender:
+        log.warning("Email skipped because EMAIL_USER is missing")
+        return False
+
+    # Prefer Brevo's HTTP API (works where SMTP ports are blocked, e.g. Render).
+    subject = message["Subject"] or ""
+    body = message.get_content()
+    if _send_via_brevo(subject, body, recipient, sender):
+        return True
+
+    # Fall back to direct SMTP (works locally / on hosts that allow it).
+    if password:
+        return _send_via_smtp(message, recipient, sender, password)
+
+    log.warning("No working email transport: Brevo not configured and EMAIL_PASS missing")
+    return False
 
 
 def send_price_alert(
